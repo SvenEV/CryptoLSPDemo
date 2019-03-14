@@ -4,6 +4,8 @@
 
 \.project
 
+\.factorypath
+
 \.settings/org\.eclipse\.core\.resources\.prefs
 
 \.settings/org\.eclipse\.jdt\.core\.prefs
@@ -15,3 +17,7 @@ dependency-reduced-pom\.xml
 monaco-example/node_modules/
 
 monaco-example/lib/
+
+.idea/
+
+.settings/
