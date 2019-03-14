@@ -7,6 +7,7 @@ import de.upb.soot.frontends.java.WalaClassLoader;
 import java.util.Collection;
 import java.util.List;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import soot.PackManager;
 import soot.Transform;
@@ -42,22 +43,30 @@ public class CryptoServerAnalysis implements ServerAnalysis {
     // LOG.info("java project source path" + ps.getSourcePath());
     // LOG.info("java project class path" + ps.getClassPath());
     // }
+    server.logger.logVerbose("CryptoServerAnalysis: files = " + files);
 
-    CryptoTransformer transformer = new CryptoTransformer(ruleDirPath);
-    loadSourceCode(files);
-    runSootPacks(transformer);
-    Collection<AnalysisResult> results = transformer.getAnalysisResults();
-    for (AnalysisResult re : results) {
-      System.err.println(re.toString());
+    try {
+      CryptoTransformer transformer = new CryptoTransformer(ruleDirPath);
+      loadSourceCode(files);
+      runSootPacks(transformer);
+      Collection<AnalysisResult> results = transformer.getDiagnostics().stream().map(it -> (AnalysisResult)it).collect(Collectors.toList());
+
+      server.logger.logVerbose("CryptoServerAnalysis: " + results.size() + " results = " + results);
+
+      for (AnalysisResult re : results) {
+        System.err.println(re.toString());
+      }
+      server.consume(results, source());
+    } catch (Exception e) {
+      server.logger.logVerbose("CryptoServerAnalysis: Exception = " + e);
     }
-    server.consume(results, source());
   }
 
   public Collection<AnalysisResult> analyze(String srcPath) {
     CryptoTransformer transformer = new CryptoTransformer(ruleDirPath);
     loadSourceCode(srcPath);
     runSootPacks(transformer);
-    Collection<AnalysisResult> results = transformer.getAnalysisResults();
+    Collection<AnalysisResult> results = transformer.getDiagnostics().stream().map(it -> (AnalysisResult)it).collect(Collectors.toList());
     return results;
   }
 
