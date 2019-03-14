@@ -4,16 +4,24 @@ import de.upb.soot.core.SootClass;
 import de.upb.soot.frontends.java.JimpleConverter;
 import de.upb.soot.frontends.java.WalaClassLoader;
 
+import java.nio.file.Path;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import soot.PackManager;
+import soot.Scene;
 import soot.Transform;
 import soot.Transformer;
 
 import magpiebridge.core.AnalysisResult;
+import magpiebridge.core.IProjectService;
+import magpiebridge.core.JavaProjectService;
 import magpiebridge.core.MagpieServer;
 import magpiebridge.core.ServerAnalysis;
 
@@ -34,35 +42,39 @@ public class CryptoServerAnalysis implements ServerAnalysis {
 
   @Override
   public void analyze(Collection<Module> files, MagpieServer server) {
-
-    // String srcPath = server.getSourceCodePath();
-    // server.logger.logVerbose("analyze "+ srcPath);
-    // if (ps != null) {
-    // JavaProjectService ps = (JavaProjectService) server.getProjectService("java");
-    // LOG.info("java project root path" + ps.getRootPath());
-    // LOG.info("java project source path" + ps.getSourcePath());
-    // LOG.info("java project class path" + ps.getClassPath());
-    // }
-    server.logger.logVerbose("CryptoServerAnalysis: files = " + files);
-
-    try {
-      CryptoTransformer transformer = new CryptoTransformer(ruleDirPath);
-      loadSourceCode(files);
-      runSootPacks(transformer);
-      Collection<AnalysisResult> results = transformer.getDiagnostics().stream().map(it -> (AnalysisResult)it).collect(Collectors.toList());
-
-      server.logger.logVerbose("CryptoServerAnalysis: " + results.size() + " results = " + results);
-
-      for (AnalysisResult re : results) {
-        System.err.println(re.toString());
+    Set<String> srcPath = null;
+    JavaProjectService ps = (JavaProjectService)server.getProjectService("java");
+    if (ps != null) {
+      Set<Path> sourcePath = ps.getSourcePath();
+      if (!sourcePath.isEmpty()) {
+        Set<String> temp = new HashSet<>();
+        sourcePath.stream().forEach(path -> temp.add(path.toString()));
+        srcPath = temp;
       }
-      server.consume(results, source());
-    } catch (Exception e) {
-      server.logger.logVerbose("CryptoServerAnalysis: Exception = " + e);
     }
+    Collection<AnalysisResult> results = Collections.emptyList();
+    if (srcPath != null) {
+      // do whole program analysis
+      results = analyze(srcPath);
+    } else {
+      // only analyze relevant files
+      results = analyze(files);
+    }
+    for (AnalysisResult re : results) {
+      System.err.println(re.toString());
+    }
+    server.consume(results, source());
   }
 
-  public Collection<AnalysisResult> analyze(String srcPath) {
+  public Collection<AnalysisResult> analyze(Collection<? extends Module> files) {
+    CryptoTransformer transformer = new CryptoTransformer(ruleDirPath);
+    loadSourceCode(files);
+    runSootPacks(transformer);
+    Collection<AnalysisResult> results = transformer.getDiagnostics().stream().map(it -> (AnalysisResult)it).collect(Collectors.toList());
+    return results;
+  }
+
+  public Collection<AnalysisResult> analyze(Set<String> srcPath) {
     CryptoTransformer transformer = new CryptoTransformer(ruleDirPath);
     loadSourceCode(srcPath);
     runSootPacks(transformer);
@@ -70,16 +82,16 @@ public class CryptoServerAnalysis implements ServerAnalysis {
     return results;
   }
 
-  private void loadSourceCode(Collection<? extends Module> files) {
-    // use WALA source-code front end to load classes
-    WalaClassLoader loader = new WalaClassLoader(files);
+  private void loadSourceCode(Set<String> srcPath) {
+    WalaClassLoader loader = new WalaClassLoader(srcPath);
     List<SootClass> sootClasses = loader.getSootClasses();
     JimpleConverter jimpleConverter = new JimpleConverter(sootClasses);
     jimpleConverter.convertAllClasses();
   }
 
-  private void loadSourceCode(String srcPath) {
-    WalaClassLoader loader = new WalaClassLoader(srcPath);
+  private void loadSourceCode(Collection<? extends Module> files) {
+    // use WALA source-code front end to load classes
+    WalaClassLoader loader = new WalaClassLoader(files);
     List<SootClass> sootClasses = loader.getSootClasses();
     JimpleConverter jimpleConverter = new JimpleConverter(sootClasses);
     jimpleConverter.convertAllClasses();
