@@ -1,12 +1,12 @@
 import com.ibm.wala.classLoader.Module
 import com.ibm.wala.classLoader.SourceFileModule
 import com.ibm.wala.util.io.TemporaryFile
-import crypto.analysis.errors.AbstractError
 import de.upb.soot.frontends.java.JimpleConverter
 import de.upb.soot.frontends.java.WalaClassLoader
 import magpiebridge.core.AnalysisResult
 import magpiebridge.core.JavaProjectService
 import magpiebridge.core.MagpieServer
+import magpiebridge.core.Utils
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.TextDocumentService
 import soot.PackManager
@@ -14,9 +14,16 @@ import soot.Transform
 import soot.Transformer
 import java.io.File
 import java.nio.file.Paths
-import java.util.ArrayList
 import java.util.concurrent.CompletableFuture
 import java.util.function.Consumer
+
+private fun fixFileUriOnWindows(uri: String) = when {
+    System.getProperty("os.name").toLowerCase().indexOf("win") >= 0 && !uri.startsWith("file:///") ->
+        // take care of uri in windows
+        uri.replace("file://", "file:///")
+    else ->
+        uri
+}
 
 private fun analyze(rulesDir: String, sourceModules: Collection<Module>): Collection<CogniCryptDiagnostic> {
     val transformer = CryptoTransformer(rulesDir)
@@ -42,6 +49,33 @@ private fun runSootPacks(t: Transformer) {
 
 data class CryptoTextDocumentState(val clientUri: String, val serverUri: String, val text: String, val module: SourceFileModule)
 
+class ServerDocumentStore {
+    private val documentState = mutableMapOf<String, CryptoTextDocumentState>()
+    private val serverClientUri = mutableMapOf<String, String>()
+
+    fun add(clientUri: String, text: String) {
+        // Copy document to temporary file
+        val file = File.createTempFile("temp", ".java").apply { deleteOnExit() }
+        TemporaryFile.stringToFile(file, text)
+        val module = SourceFileModule(file, clientUri, null)
+        val serverUri = Paths.get(file.toURI()).toUri().toString()
+
+        val state = CryptoTextDocumentState(clientUri, serverUri, text, module)
+        documentState[clientUri] = state
+        serverClientUri[serverUri] = clientUri
+    }
+
+    fun remove(clientUri: String) =
+        documentState.remove(clientUri)?.let {
+            serverClientUri.remove(it.serverUri)
+            true
+        } ?: false
+
+    val documents get() = documentState.values.toList()
+    fun getByClientUri(clientUri: String) = documentState[clientUri]
+    fun getByServerUri(serverUri: String) = serverClientUri[serverUri]?.let { getByClientUri(it) }
+}
+
 class CryptoTextDocumentService(private val server: CryptoLanguageServer, private val rulesDir: String) : TextDocumentService {
 
     private lateinit var diagnostics: Collection<CogniCryptDiagnostic>
@@ -50,18 +84,10 @@ class CryptoTextDocumentService(private val server: CryptoLanguageServer, privat
         val doc = params.textDocument
 
         if (doc.languageId == "java") {
-            // Copy document to temporary file
-            val file = File.createTempFile("temp", ".java").apply { deleteOnExit() }
-            TemporaryFile.stringToFile(file, doc.text)
-            val module = SourceFileModule(file, doc.uri, null)
-            val serverUri = Paths.get(file.toURI()).toUri().toString()
-
-            val state = CryptoTextDocumentState(doc.uri, serverUri, doc.text, module)
-            server.documentState[doc.uri] = state
-            server.serverClientUri[serverUri] = doc.uri
+            server.documentStore.add(doc.uri, doc.text)
         }
 
-        diagnostics = analyze(rulesDir, server.documentState.values.map { it.module })
+        diagnostics = analyze(rulesDir, server.documentStore.documents.map { it.module })
         server.consume(diagnostics, "CogniCrypt")
     }
 
@@ -69,10 +95,7 @@ class CryptoTextDocumentService(private val server: CryptoLanguageServer, privat
     }
 
     override fun didClose(params: DidCloseTextDocumentParams) {
-        server.documentState.remove(params.textDocument.uri)?.let {
-            server.serverClientUri.remove(it.serverUri)
-        }
-
+        server.documentStore.remove(params.textDocument.uri)
     }
 
     override fun didChange(p0: DidChangeTextDocumentParams?) {
@@ -103,42 +126,38 @@ class CryptoTextDocumentService(private val server: CryptoLanguageServer, privat
 
 class CryptoLanguageServer(private val rulesDir: String) : MagpieServer() {
 
-    val documentState = mutableMapOf<String, CryptoTextDocumentState>()
-    val serverClientUri = mutableMapOf<String, String>()
+    /** Keeps track of all documents currently opened in the client */
+    val documentStore = ServerDocumentStore()
 
     override fun getTextDocumentService() = CryptoTextDocumentService(this, rulesDir)
 
     override fun createDiagnosticConsumer(diagList: MutableList<Diagnostic>, source: String) = Consumer<AnalysisResult> { result ->
-        val d = Diagnostic()
-        d.message = result.toString(false)
-        d.range = getLocationFrom(result.position()).range
-        d.source = source
-        val relatedList = ArrayList<DiagnosticRelatedInformation>()
-        for (related in result.related()) {
-            val di = DiagnosticRelatedInformation()
-            di.location = getLocationFrom(related.fst)
-            di.message = related.snd
-            relatedList.add(di)
-        }
-        d.relatedInformation = relatedList
-        d.severity = result.severity()
-        if (!diagList.contains(d)) {
-            diagList.add(d)
-        }
-        val pdp = PublishDiagnosticsParams()
-        pdp.diagnostics = diagList
-        var serverUri = result.position().getURL().toString()
-        if (System.getProperty("os.name").toLowerCase().indexOf("win") >= 0) {
-            // take care of uri in windows
-            if (!serverUri.startsWith("file:///")) {
-                serverUri = serverUri.replace("file://", "file:///")
+        val diag = Diagnostic().apply {
+            this.source = source
+            message = result.toString(false)
+            range = Utils.getLocationFrom(result.position()).range
+            severity = result.severity()
+            relatedInformation = result.related().map { related ->
+                DiagnosticRelatedInformation().apply {
+                    location = Utils.getLocationFrom(related.fst)
+                    message = related.snd
+                }
             }
         }
-        val clientUri = serverClientUri[serverUri]
-        pdp.uri = clientUri
-        client.publishDiagnostics(pdp)
-        logger.logServerMsg(pdp.toString())
-        System.err.println("server:\n$pdp")
+
+        if (!diagList.contains(diag)) {
+            diagList.add(diag)
+        }
+
+        val serverUri = fixFileUriOnWindows(result.position().url.toString())
+        val publishParams = PublishDiagnosticsParams().apply {
+            diagnostics = diagList
+            uri = documentStore.getByServerUri(serverUri)!!.clientUri
+        }
+
+        client.publishDiagnostics(publishParams)
+        logger.logServerMsg(publishParams.toString())
+        System.err.println("server:\n$publishParams")
     }
 }
 
