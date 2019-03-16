@@ -43,8 +43,9 @@ public class CryptoServerAnalysis implements ServerAnalysis {
   @Override
   public void analyze(Collection<Module> files, MagpieServer server) {
     Set<String> srcPath = null;
-    JavaProjectService ps = (JavaProjectService)server.getProjectService("java");
-    if (ps != null) {
+    Optional<IProjectService> opt = server.getProjectService("java");
+    if (opt.isPresent()) {
+      JavaProjectService ps = (JavaProjectService) server.getProjectService("java").get();
       Set<Path> sourcePath = ps.getSourcePath();
       if (!sourcePath.isEmpty()) {
         Set<String> temp = new HashSet<>();
