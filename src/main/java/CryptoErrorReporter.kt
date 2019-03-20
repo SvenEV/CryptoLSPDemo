@@ -32,7 +32,7 @@ class CryptoErrorReporter : ErrorMarkerListener() {
 
                         // TODO. get relatedInfo from crypto analysis.
                         val highlightPositions = when (error) {
-                            is ConstraintError -> error.callSiteWithExtractedValue.dataFlowStatements
+                            is ConstraintError -> error.callSiteWithExtractedValue.`val`.dataFlowStatements
                                     .map { (it.unit.get().getTag("PositionTag") as PositionTag).position }
                                     .toList()
                             else -> emptyList()
