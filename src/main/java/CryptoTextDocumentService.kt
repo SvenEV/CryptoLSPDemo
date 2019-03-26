@@ -1,5 +1,4 @@
 import com.ibm.wala.classLoader.Module
-import crypto.pathconditions.z3.constructDouble
 import de.upb.soot.frontends.java.JimpleConverter
 import de.upb.soot.frontends.java.WalaClassLoader
 import org.eclipse.lsp4j.*
@@ -83,12 +82,12 @@ class CryptoTextDocumentService(
     }
 
     override fun documentHighlight(position: TextDocumentPositionParams): CompletableFuture<MutableList<out DocumentHighlight>> {
-        val position = position.position
+        val pos = position.position
         val surroundingDiagnostic = diagnostics.firstOrNull {
-            position.line + 1 >= it.position().firstLine &&
-                position.line + 1 <= it.position().lastLine &&
-                position.character + 1 >= it.position().firstCol &&
-                position.character <= it.position().lastCol
+            pos.line + 1 >= it.position().firstLine &&
+                pos.line + 1 <= it.position().lastLine &&
+                pos.character + 1 >= it.position().firstCol &&
+                pos.character <= it.position().lastCol
         }
 
         return CompletableFuture.completedFuture(
