@@ -2,6 +2,7 @@ import com.ibm.wala.classLoader.Module
 import de.upb.soot.frontends.java.JimpleConverter
 import de.upb.soot.frontends.java.WalaClassLoader
 import org.eclipse.lsp4j.*
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.TextDocumentService
 import soot.PackManager
@@ -62,8 +63,8 @@ class CryptoTextDocumentService(
             actions = listOf(
                 MessageActionItem("Re-Analyze")
             )
-        })?.thenApply {
-            if (it.title == "Re-Analyze") {
+        })?.thenApply { action ->
+            if (action.title == "Re-Analyze") {
                 diagnostics = analyze(client(), rulesDir, server.documentStore.documents.map { it.module })
                 server.clearDiagnostics(server.documentStore.getByClientUri(params.textDocument.uri)!!.serverUri, "CogniCrypt")
                 server.consume(diagnostics, "CogniCrypt")
@@ -83,18 +84,29 @@ class CryptoTextDocumentService(
 
     override fun documentHighlight(position: TextDocumentPositionParams): CompletableFuture<MutableList<out DocumentHighlight>> {
         val pos = position.position
-        val surroundingDiagnostic = diagnostics.firstOrNull {
-            pos.line + 1 >= it.position().firstLine &&
-                pos.line + 1 <= it.position().lastLine &&
-                pos.character + 1 >= it.position().firstCol &&
-                pos.character <= it.position().lastCol
-        }
+        val surroundingDiagnostic = diagnostics.firstOrNull { it.position().asRange.contains(pos) }
 
         return CompletableFuture.completedFuture(
-            surroundingDiagnostic?.highlightPositions?.map {
-                val start = Position(it.firstLine - 1, it.firstCol - 1)
-                val end = Position(it.lastLine - 1, it.lastCol)
-                DocumentHighlight(Range(start, end), DocumentHighlightKind.Text)
+            surroundingDiagnostic?.highlightPositions?.mapNotNull {
+                val doc = server.documentStore.getByClientUri(position.textDocument.uri)
+                if (doc?.serverUri == it.serverUri)
+                    DocumentHighlight(it.range, DocumentHighlightKind.Read)
+                else
+                    null
             }?.toMutableList() ?: mutableListOf())
+    }
+
+    override fun hover(position: TextDocumentPositionParams?): CompletableFuture<Hover> {
+        return CompletableFuture.completedFuture(Hover(listOf()))
+    }
+
+    override fun codeLens(params: CodeLensParams?): CompletableFuture<MutableList<out CodeLens>> {
+        return CompletableFuture.completedFuture(diagnostics
+            .map { CodeLens(it.position().asRange, Command(it.message.substring(0, it.message.indexOf(". ")), "cmd"), null) }
+            .toMutableList())
+    }
+
+    override fun documentSymbol(params: DocumentSymbolParams?): CompletableFuture<MutableList<Either<SymbolInformation, DocumentSymbol>>> {
+        return CompletableFuture.completedFuture(mutableListOf())
     }
 }

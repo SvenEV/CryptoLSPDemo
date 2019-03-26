@@ -10,7 +10,7 @@ import org.eclipse.lsp4j.DiagnosticSeverity
 import soot.Unit
 import soot.tagkit.LineNumberTag
 
-class CogniCryptDiagnostic(val message: String, private val position: Position, val highlightPositions: List<Position>) : AnalysisResult {
+class CogniCryptDiagnostic(val message: String, private val position: Position, val highlightPositions: List<SourceRange>) : AnalysisResult {
     override fun repair() = ""
     override fun related() = emptyList<Pair<Position, String>>()
     override fun severity() = DiagnosticSeverity.Error
@@ -46,7 +46,7 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                         // TODO. get relatedInfo from crypto analysis.
                         val highlightPositions = when (error) {
                             is ErrorWithObjectAllocation -> error.dataFlowPath
-                                .mapNotNull { tryGetSourcePosition(it.stmt().unit.get()) }
+                                .mapNotNull { tryGetSourcePosition(it.stmt().unit.get())?.asSourceRange }
                                 .toList()
                             else -> emptyList()
                         }

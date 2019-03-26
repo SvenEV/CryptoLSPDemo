@@ -31,7 +31,7 @@ class CryptoLanguageServer(private val rulesDir: String) : MagpieServer() {
             diagList.add(diag)
         }
 
-        val serverUri = fixFileUriOnWindows(result.position().url.toString())
+        val serverUri = result.position().url.toStringWithWindowsFix()
         val publishParams = PublishDiagnosticsParams().apply {
             diagnostics = diagList
             uri = documentStore.getByServerUri(serverUri)!!.clientUri
@@ -41,12 +41,4 @@ class CryptoLanguageServer(private val rulesDir: String) : MagpieServer() {
         logger.logServerMsg(publishParams.toString())
         System.err.println("server:\n$publishParams")
     }
-}
-
-private fun fixFileUriOnWindows(uri: String) = when {
-    System.getProperty("os.name").toLowerCase().indexOf("win") >= 0 && !uri.startsWith("file:///") ->
-        // take care of uri in windows
-        uri.replace("file://", "file:///")
-    else ->
-        uri
 }
