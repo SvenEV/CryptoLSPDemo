@@ -1,3 +1,4 @@
+import boomerang.callgraph.ObservableStaticICFG
 import boomerang.preanalysis.BoomerangPretransformer
 import crypto.HeadlessCryptoScanner.CG
 import crypto.Utils
@@ -46,7 +47,7 @@ class CryptoTransformer(private val ruleDir: String) : SceneTransformer() {
     override fun internalTransform(phaseName: String, options: Map<String, String>) {
         BoomerangPretransformer.v().reset()
         BoomerangPretransformer.v().apply()
-        val icfg = JimpleBasedInterproceduralCFG(false)
+        val icfg = ObservableStaticICFG(JimpleBasedInterproceduralCFG(false))
         val rules = rules
 
         val reporter = CrySLResultsReporter().apply {

@@ -1,11 +1,14 @@
 import com.ibm.wala.cast.tree.CAstSourcePositionMap.Position
+import com.ibm.wala.cast.tree.impl.LineNumberPosition
 import com.ibm.wala.util.collections.Pair
-import crypto.analysis.errors.ConstraintError
-import crypto.reporting.ErrorMarkerListener
+import crypto.analysis.errors.ErrorWithObjectAllocation
+import crypto.reporting.PathConditionsErrorMarkerListener
 import de.upb.soot.frontends.java.PositionTag
 import magpiebridge.core.AnalysisResult
 import magpiebridge.core.Kind
 import org.eclipse.lsp4j.DiagnosticSeverity
+import soot.Unit
+import soot.tagkit.LineNumberTag
 
 class CogniCryptDiagnostic(val message: String, private val position: Position, val highlightPositions: List<Position>) : AnalysisResult {
     override fun repair() = ""
@@ -16,8 +19,18 @@ class CogniCryptDiagnostic(val message: String, private val position: Position, 
     override fun toString(useMarkdown: Boolean) = message
 }
 
-class CryptoErrorReporter : ErrorMarkerListener() {
+class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
     lateinit var diagnostics: Collection<CogniCryptDiagnostic>
+
+    private fun tryGetSourcePosition(stmt: Unit): Position? {
+        val positionTag = stmt.getTag("PositionTag") as? PositionTag
+        if (positionTag != null)
+            return positionTag.position
+        val lineNumberTag = stmt.getTag("LineNumberTag") as? LineNumberTag
+        if (lineNumberTag != null)
+            return LineNumberPosition(null, null, lineNumberTag.lineNumber) // TODO: specify url and localFile
+        return null
+    }
 
     override fun afterAnalysis() {
         diagnostics = this.errorMarkers.rowMap()
@@ -32,9 +45,9 @@ class CryptoErrorReporter : ErrorMarkerListener() {
 
                         // TODO. get relatedInfo from crypto analysis.
                         val highlightPositions = when (error) {
-                            is ConstraintError -> error.callSiteWithExtractedValue.`val`.dataFlowStatements
-                                    .map { (it.unit.get().getTag("PositionTag") as PositionTag).position }
-                                    .toList()
+                            is ErrorWithObjectAllocation -> error.dataFlowPath
+                                .mapNotNull { tryGetSourcePosition(it.stmt().unit.get()) }
+                                .toList()
                             else -> emptyList()
                         }
 

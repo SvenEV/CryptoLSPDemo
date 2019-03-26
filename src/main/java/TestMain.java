@@ -1,7 +1,6 @@
 import java.io.File;
 import java.util.Collection;
 
-import org.apache.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
 import magpiebridge.core.AnalysisResult;

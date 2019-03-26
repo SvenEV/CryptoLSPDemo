@@ -64,7 +64,7 @@ class CryptoLanguageServer(private val rulesDir: String) : MagpieServer() {
     /** Keeps track of all documents currently opened in the client */
     val documentStore = ServerDocumentStore()
 
-    override fun getTextDocumentService() = CryptoTextDocumentService(this, rulesDir)
+    override fun getTextDocumentService() = CryptoTextDocumentService(this, { client }, rulesDir)
 
     override fun createDiagnosticConsumer(diagList: MutableList<Diagnostic>, source: String) = Consumer<AnalysisResult> { result ->
         val diag = Diagnostic().apply {
@@ -97,12 +97,10 @@ class CryptoLanguageServer(private val rulesDir: String) : MagpieServer() {
 }
 
 object CryptoDemoMain {
-
     @JvmStatic
     fun main(args: Array<String>) {
         val ruleDirPath = TestMain.ruleDirPath
         // String ruleDirPath = args[0];
-        println("server started")
         val language = "java"
         val javaProjectService = JavaProjectService()
         val server = CryptoLanguageServer("E:\\Projects\\Masterarbeit\\CryptoLSPDemo\\JCA_rules")
@@ -110,5 +108,4 @@ object CryptoDemoMain {
         server.addAnalysis(language, CryptoServerAnalysis(ruleDirPath))
         server.launchOnStdio()
     }
-
 }
