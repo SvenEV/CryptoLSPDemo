@@ -13,7 +13,6 @@ class CryptoTextDocumentService(
     }
 
     override fun didSave(params: DidSaveTextDocumentParams) {
-        server.notifyStaleResults("Document saved")
     }
 
     override fun didClose(params: DidCloseTextDocumentParams) {
