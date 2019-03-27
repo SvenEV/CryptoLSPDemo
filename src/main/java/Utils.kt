@@ -1,9 +1,12 @@
 import com.ibm.wala.cast.tree.CAstSourcePositionMap
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
+import java.net.URI
 import java.net.URL
+import java.nio.file.Path
+import java.nio.file.Paths
 
-data class SourceRange(val range: Range, val serverUri: String)
+data class SourceRange(val range: Range, val sourcePath: Path)
 
 /** Converts a WALA [CAstSourcePositionMap.Position] to an LSP [Range] */
 val CAstSourcePositionMap.Position.asRange: Range
@@ -13,7 +16,7 @@ val CAstSourcePositionMap.Position.asRange: Range
         return Range(start, end)
     }
 
-val CAstSourcePositionMap.Position.asSourceRange: SourceRange get() = SourceRange(asRange, this.url.toStringWithWindowsFix())
+val CAstSourcePositionMap.Position.asSourceRange: SourceRange get() = SourceRange(asRange, this.url.asFilePath)
 
 /** Checks if a [Position] lies within a [Range] */
 fun Range.contains(pos: Position) =
@@ -30,4 +33,8 @@ fun fixFileUriOnWindows(uri: String) = when {
         uri
 }
 
+// We must replace "file://" with "file:///" (WALA uses "file://")
+// and un-escape special characters like ':' (VS Code escapes ':')
 fun URL.toStringWithWindowsFix() = fixFileUriOnWindows(toString())
+val String.asFilePath: Path get() = Paths.get(URI(fixFileUriOnWindows(this)))
+val URL.asFilePath: Path get() = toString().asFilePath
