@@ -1,5 +1,3 @@
-import magpiebridge.core.Logger
-import magpiebridge.core.Utils
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.LanguageClient
@@ -61,14 +59,14 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
         diagnostics
             .map { result ->
                 Diagnostic().apply {
-                    this.source = result.position().url.toStringWithWindowsFix()
-                    message = result.toString(false)
-                    range = Utils.getLocationFrom(result.position()).range
-                    severity = result.severity()
-                    relatedInformation = result.related().map { related ->
+                    source = result.location.uri
+                    message = result.message
+                    range = result.location.range
+                    severity = result.severity
+                    relatedInformation = result.highlightLocations.map { related ->
                         DiagnosticRelatedInformation().apply {
-                            location = Utils.getLocationFrom(related.fst)
-                            message = related.snd
+                            this.location = related
+                            message = "Data Flow Path"
                         }
                     }
                 }
@@ -86,13 +84,13 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
 
     fun diagnosticsAt(filePath: Path, position: Position) =
         diagnostics.filter {
-            it.position().url.asFilePath == filePath &&
-                it.position().asRange.contains(position)
+            it.location.uri.asFilePath == filePath &&
+                it.location.range.contains(position)
         }
 
     override fun getTextDocumentService() = CryptoTextDocumentService(this, { client }, rulesDir)
 
-    override fun getWorkspaceService(): WorkspaceService = CryptoWorkspaceService(this, { client })
+    override fun getWorkspaceService(): WorkspaceService = CryptoWorkspaceService(this) { client }
 
     override fun initialize(params: InitializeParams): CompletableFuture<InitializeResult> {
         logger.logClientMsg(params.toString())
@@ -125,19 +123,17 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
 }
 
 
+//
 // Launcher functions
+//
 
-fun CryptoLanguageServer.launchOnStdio() {
-    launchOnStream(
-        Utils.logStream(System.`in`, "magpie.in"),
-        Utils.logStream(System.out, "magpie.out"))
-}
+fun CryptoLanguageServer.launchOnStdio() =
+    launchOnStream(System.`in`, System.out)
 
 fun CryptoLanguageServer.launchOnStream(inputStream: InputStream, outputStream: OutputStream) {
-    val launcher = LSPLauncher.createServerLauncher(
-        this,
-        Utils.logStream(inputStream, "magpie.in"),
-        Utils.logStream(outputStream, "magpie.out"),
+    val launcher = LSPLauncher.createServerLauncher(this,
+        inputStream.logStream("magpie.in"),
+        outputStream.logStream("magpie.out"),
         true,
         PrintWriter(System.err))
     connect(launcher.remoteProxy)
@@ -147,10 +143,9 @@ fun CryptoLanguageServer.launchOnStream(inputStream: InputStream, outputStream: 
 fun CryptoLanguageServer.launchOnSocketPort(host: String, port: Int) {
     try {
         val connectionSocket = Socket(host, port)
-        val launcher = LSPLauncher.createServerLauncher(
-            this,
-            Utils.logStream(connectionSocket.getInputStream(), "magpie.in"),
-            Utils.logStream(connectionSocket.getOutputStream(), "magpie.out"))
+        val launcher = LSPLauncher.createServerLauncher(this,
+            connectionSocket.getInputStream().logStream("magpie.in"),
+            connectionSocket.getOutputStream().logStream("magpie.out"))
         connect(launcher.remoteProxy, connectionSocket)
         launcher.startListening()
     } catch (e: IOException) {

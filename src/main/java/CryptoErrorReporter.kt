@@ -1,35 +1,31 @@
-import com.ibm.wala.cast.tree.CAstSourcePositionMap.Position
-import com.ibm.wala.cast.tree.impl.LineNumberPosition
-import com.ibm.wala.util.collections.Pair
 import crypto.analysis.errors.ErrorWithObjectAllocation
 import crypto.reporting.PathConditionsErrorMarkerListener
 import de.upb.soot.frontends.java.PositionTag
-import magpiebridge.core.AnalysisResult
-import magpiebridge.core.Kind
 import org.eclipse.lsp4j.DiagnosticSeverity
 import org.eclipse.lsp4j.Location
+import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
 import soot.Unit
 import soot.tagkit.LineNumberTag
 
-class CogniCryptDiagnostic(val message: String, private val position: Position, val highlightLocations: List<Location>) : AnalysisResult {
-    override fun repair() = ""
-    override fun related() = emptyList<Pair<Position, String>>()
-    override fun severity() = DiagnosticSeverity.Error
-    override fun kind() = Kind.Diagnostic
-    override fun position() = position
-    override fun toString(useMarkdown: Boolean) = message
-}
+data class CogniCryptDiagnostic(
+    val message: String,
+    val severity: DiagnosticSeverity,
+    val location: Location,
+    val highlightLocations: List<Location>)
 
 class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
     lateinit var diagnostics: Collection<CogniCryptDiagnostic>
 
-    private fun tryGetSourcePosition(stmt: Unit): Position? {
+    private fun tryGetSourceLocation(stmt: Unit): Location? {
         val positionTag = stmt.getTag("PositionTag") as? PositionTag
         if (positionTag != null)
-            return positionTag.position
+            return positionTag.position.asLocation
         val lineNumberTag = stmt.getTag("LineNumberTag") as? LineNumberTag
-        if (lineNumberTag != null)
-            return LineNumberPosition(null, null, lineNumberTag.lineNumber) // TODO: specify url and localFile
+        if (lineNumberTag != null) {
+            val pos = Position(lineNumberTag.lineNumber - 1, 0)
+            return Location(null, Range(pos, pos)) // TODO: specify URI
+        }
         return null
     }
 
@@ -40,19 +36,19 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                     methodMap.value.map { error ->
 
                         val stmt = error.errorLocation.unit.get()
-                        val position = (stmt.getTag("PositionTag") as PositionTag).position
+                        val location = (stmt.getTag("PositionTag") as PositionTag).position.asLocation
                         val msg = String.format("%s violating CrySL rule for %s. %s", error.javaClass.simpleName,
                             error.rule.className, error.toErrorMarkerString())
 
                         // TODO. get relatedInfo from crypto analysis.
                         val highlightPositions = when (error) {
                             is ErrorWithObjectAllocation -> error.dataFlowPath
-                                .mapNotNull { tryGetSourcePosition(it.stmt().unit.get())?.asLocation }
+                                .mapNotNull { tryGetSourceLocation(it.stmt().unit.get()) }
                                 .toList()
                             else -> emptyList()
                         }
 
-                        CogniCryptDiagnostic(msg, position, highlightPositions)
+                        CogniCryptDiagnostic(msg, DiagnosticSeverity.Error, location, highlightPositions)
                     }
                 }
             }

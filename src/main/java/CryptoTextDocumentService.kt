@@ -26,7 +26,7 @@ class CryptoTextDocumentService(
 
         return CompletableFuture.completedFuture(
             surroundingDiagnostic?.highlightLocations?.mapNotNull {
-                if (it.uri == position.textDocument.uri)
+                if (it.uri.asFilePath == position.textDocument.uri.asFilePath)
                     DocumentHighlight(it.range, DocumentHighlightKind.Read)
                 else
                     null
@@ -41,10 +41,10 @@ class CryptoTextDocumentService(
         val debugLens = CodeLens(
             Range(Position(0, 0), Position(0, 0)),
             KnownCommands.Debug.asCommand,
-            null);
+            null)
 
         val lenses = server.diagnostics
-            .map { CodeLens(it.position().asRange, Command(it.message.substring(0, it.message.indexOf(". ")), "cmd"), null) }
+            .map { CodeLens(it.location.range, Command(it.message.substring(0, it.message.indexOf(". ")), "cmd"), null) }
             .plus(debugLens)
             .toMutableList()
 
