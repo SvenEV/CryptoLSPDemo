@@ -43,7 +43,7 @@ class CryptoTextDocumentService(
             KnownCommands.Debug.asCommand,
             null);
 
-        val lenses = server.diagnosticList
+        val lenses = server.diagnostics
             .map { CodeLens(it.position().asRange, Command(it.message.substring(0, it.message.indexOf(". ")), "cmd"), null) }
             .plus(debugLens)
             .toMutableList()

@@ -5,7 +5,7 @@ import java.util.concurrent.CompletableFuture
 
 class CryptoWorkspaceService(
     private val server: CryptoLanguageServer,
-    private val client: () -> LanguageClient) : WorkspaceService {
+    private val client: () -> LanguageClient?) : WorkspaceService {
 
     override fun didChangeWatchedFiles(args: DidChangeWatchedFilesParams) {
         server.notifyStaleResults("Files changed")
@@ -28,7 +28,7 @@ class CryptoWorkspaceService(
     override fun executeCommand(params: ExecuteCommandParams): CompletableFuture<Any> {
         when (KnownCommands.tryParse(params.command)) {
             KnownCommands.Debug ->
-                client().showMessage(MessageParams(MessageType.Info, "Watched files:\n" + server.documentStore.documents
+                client()?.showMessage(MessageParams(MessageType.Info, "Watched files:\n" + server.documentStore.documents
                     .joinToString("\n") { it.sourcePath.toString() }))
         }
         return CompletableFuture.completedFuture(null)

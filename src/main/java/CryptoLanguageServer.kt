@@ -1,61 +1,42 @@
-import de.upb.soot.frontends.java.JimpleConverter
-import de.upb.soot.frontends.java.WalaClassLoader
-import magpiebridge.core.AnalysisResult
-import magpiebridge.core.MagpieServer
+import magpiebridge.core.Logger
 import magpiebridge.core.Utils
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.eclipse.lsp4j.*
+import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.LanguageClient
+import org.eclipse.lsp4j.services.LanguageClientAware
+import org.eclipse.lsp4j.services.LanguageServer
 import org.eclipse.lsp4j.services.WorkspaceService
-import soot.PackManager
-import soot.Transform
-import soot.Transformer
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import java.io.PrintWriter
+import java.net.Socket
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
-import java.util.function.Consumer
 
-enum class KnownCommands(val id: String, val title: String) {
-    Debug("lspdebug", "LSP Debug");
+class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, LanguageClientAware {
+    override fun shutdown() = CompletableFuture.completedFuture<Any>(null)!!
 
-    val asCommand get() = Command(title, id)
-
-    companion object {
-        fun tryParse(s: String) = KnownCommands.values().firstOrNull { it.id == s }
-    }
-}
-
-private fun analyze(client: LanguageClient?, rulesDir: String, rootFolder: Path): Collection<CogniCryptDiagnostic> =
-    try {
-        val transformer = CryptoTransformer(rulesDir)
-        loadSourceCode(rootFolder)
-        runSootPacks(transformer)
-        transformer.diagnostics.forEach { System.err.println(it) }
-        transformer.diagnostics
-    } catch (e: Exception) {
-        val trace = ExceptionUtils.getStackTrace(e)
-        client?.showMessage(MessageParams(MessageType.Error, "Analysis failed:\n$trace"))
-        emptyList()
+    override fun exit() {
     }
 
-private fun loadSourceCode(rootFolder: Path) {
-    val loader = WalaClassLoader(rootFolder.toString())
-    val sootClasses = loader.sootClasses
-    val jimpleConverter = JimpleConverter(sootClasses)
-    jimpleConverter.convertAllClasses()
-}
+    override fun connect(client: LanguageClient?) {
+        this.client = client
+    }
 
-private fun runSootPacks(t: Transformer) {
-    PackManager.v().getPack("wjtp").add(Transform("wjtp.cognicrypt", t))
-    PackManager.v().getPack("cg").apply()
-    PackManager.v().getPack("wjtp").apply()
-}
-
-class CryptoLanguageServer(private val rulesDir: String) : MagpieServer() {
+    fun connect(client: LanguageClient?, socket: Socket) {
+        connect(client)
+        connectionSocket = socket
+    }
 
     /** Keeps track of all documents belonging to the workspace currently opened in the client */
     lateinit var documentStore: ServerDocumentStore
 
-    var diagnosticList: Collection<CogniCryptDiagnostic> = emptyList()
+    val logger = Logger()
+    var client: LanguageClient? = null
+    var connectionSocket: Socket? = null
+    var rootPath: Path? = null
+    var diagnostics: Collection<CogniCryptDiagnostic> = emptyList()
 
     fun notifyStaleResults(msg: String) {
         client?.showMessageRequest(ShowMessageRequestParams().apply {
@@ -66,7 +47,7 @@ class CryptoLanguageServer(private val rulesDir: String) : MagpieServer() {
             )
         })?.thenApply { action ->
             if (action.title == "Re-Analyze") {
-                diagnosticList = analyze(client, rulesDir, documentStore.rootFolder)
+                diagnostics = analyze(client, rulesDir, documentStore.rootFolder)
                 notifyDiagnostics()
             }
         }
@@ -77,7 +58,7 @@ class CryptoLanguageServer(private val rulesDir: String) : MagpieServer() {
     }
 
     fun notifyDiagnostics() {
-        val diags = diagnosticList
+        diagnostics
             .map { result ->
                 Diagnostic().apply {
                     this.source = result.position().url.toStringWithWindowsFix()
@@ -93,19 +74,18 @@ class CryptoLanguageServer(private val rulesDir: String) : MagpieServer() {
                 }
             }
             .groupBy { it.source }
-
-        diags.forEach { sourceUri, diags ->
-            val publishParams = PublishDiagnosticsParams().apply {
-                uri = sourceUri
-                diagnostics = diags
+            .forEach { sourceUri, diags ->
+                val publishParams = PublishDiagnosticsParams().apply {
+                    uri = sourceUri
+                    diagnostics = diags
+                }
+                client?.publishDiagnostics(publishParams)
+                System.err.println("server:\n$publishParams")
             }
-            client.publishDiagnostics(publishParams)
-            System.err.println("server:\n$publishParams")
-        }
     }
 
     fun diagnosticsAt(filePath: Path, position: Position) =
-        diagnosticList.filter {
+        diagnostics.filter {
             it.position().url.asFilePath == filePath &&
                 it.position().asRange.contains(position)
         }
@@ -114,23 +94,66 @@ class CryptoLanguageServer(private val rulesDir: String) : MagpieServer() {
 
     override fun getWorkspaceService(): WorkspaceService = CryptoWorkspaceService(this, { client })
 
-    override fun createDiagnosticConsumer(diagList: MutableList<Diagnostic>?, source: String?) = Consumer<AnalysisResult> {}
+    override fun initialize(params: InitializeParams): CompletableFuture<InitializeResult> {
+        logger.logClientMsg(params.toString())
+        System.err.println("client:\n$params")
 
-    override fun initialize(params: InitializeParams): CompletableFuture<InitializeResult> =
-        super.initialize(params).thenApply { result ->
-            val rootFolder = params.rootUri.asFilePath
-            documentStore = ServerDocumentStore(rootFolder)
+        this.rootPath = params.rootUri?.asFilePath
+        documentStore = ServerDocumentStore(params.rootUri.asFilePath)
 
-            result.capabilities.executeCommandProvider = ExecuteCommandOptions(KnownCommands.values().map { it.id })
-            result.capabilities.workspace = WorkspaceServerCapabilities(WorkspaceFoldersOptions().apply {
-                setChangeNotifications(true)
+        val result = InitializeResult(
+            ServerCapabilities().apply {
+                setTextDocumentSync(TextDocumentSyncKind.Full)
+                documentHighlightProvider = true
+                codeLensProvider = CodeLensOptions().apply { isResolveProvider = true }
+                executeCommandProvider = ExecuteCommandOptions(KnownCommands.values().map { it.id })
+                workspace = WorkspaceServerCapabilities(WorkspaceFoldersOptions().apply {
+                    setChangeNotifications(true)
+                })
             })
-            result
-        }
+
+        System.err.println("server:\n${result.capabilities}")
+        logger.logServerMsg(result.toString())
+        return CompletableFuture.completedFuture(result)
+    }
 
     override fun initialized(params: InitializedParams?) {
         super.initialized(params)
-        diagnosticList = analyze(client, rulesDir, documentStore.rootFolder)
+        diagnostics = analyze(client, rulesDir, documentStore.rootFolder)
         notifyDiagnostics()
+    }
+}
+
+
+// Launcher functions
+
+fun CryptoLanguageServer.launchOnStdio() {
+    launchOnStream(
+        Utils.logStream(System.`in`, "magpie.in"),
+        Utils.logStream(System.out, "magpie.out"))
+}
+
+fun CryptoLanguageServer.launchOnStream(inputStream: InputStream, outputStream: OutputStream) {
+    val launcher = LSPLauncher.createServerLauncher(
+        this,
+        Utils.logStream(inputStream, "magpie.in"),
+        Utils.logStream(outputStream, "magpie.out"),
+        true,
+        PrintWriter(System.err))
+    connect(launcher.remoteProxy)
+    launcher.startListening()
+}
+
+fun CryptoLanguageServer.launchOnSocketPort(host: String, port: Int) {
+    try {
+        val connectionSocket = Socket(host, port)
+        val launcher = LSPLauncher.createServerLauncher(
+            this,
+            Utils.logStream(connectionSocket.getInputStream(), "magpie.in"),
+            Utils.logStream(connectionSocket.getOutputStream(), "magpie.out"))
+        connect(launcher.remoteProxy, connectionSocket)
+        launcher.startListening()
+    } catch (e: IOException) {
+        e.printStackTrace()
     }
 }

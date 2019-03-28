@@ -13,7 +13,7 @@ import soot.jimple.toolkits.ide.icfg.JimpleBasedInterproceduralCFG
 import soot.options.Options
 import java.io.File
 
-class CryptoTransformer(private val ruleDir: String) : SceneTransformer() {
+class CryptoTransformer(ruleDir: String) : SceneTransformer() {
     private val errorReporter: CryptoErrorReporter
 
     // When whole program mode is disabled, the classpath misses jce.jar
@@ -37,7 +37,7 @@ class CryptoTransformer(private val ruleDir: String) : SceneTransformer() {
             .toList()
 
         if (rules.isEmpty()) {
-            println("CogniCrypt did not find any rules to start the analysis for. \n It checked for rules in $ruleDir")
+            println("CogniCrypt did not find any rules to start the analysis for. It checked for rules in $ruleDir")
         }
 
         excludeList = rules.map { Utils.getFullyQualifiedName(it) }.toList()
@@ -65,7 +65,6 @@ class CryptoTransformer(private val ruleDir: String) : SceneTransformer() {
     }
 
     private fun initilizeSootOptions() {
-        // set up soot options
         G.reset()
         Options.v().set_whole_program(true)
         when (callGraphAlgorithm) {
