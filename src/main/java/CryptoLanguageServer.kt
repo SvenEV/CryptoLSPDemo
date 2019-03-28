@@ -35,6 +35,7 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     var connectionSocket: Socket? = null
     var rootPath: Path? = null
     var diagnostics: Collection<CogniCryptDiagnostic> = emptyList()
+    var diagnosticsAwaiter: CompletableFuture<Unit> = CompletableFuture()
 
     fun notifyStaleResults(msg: String) {
         client?.showMessageRequest(ShowMessageRequestParams().apply {
@@ -45,8 +46,7 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
             )
         })?.thenApply { action ->
             if (action.title == "Re-Analyze") {
-                diagnostics = analyze(client, rulesDir, documentStore.rootFolder)
-                notifyDiagnostics()
+                performAnalysis()
             }
         }
     }
@@ -55,31 +55,48 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
         client?.showMessage(MessageParams(MessageType.Warning, "Multiple workspace folders are not supported by the CogniCrypt language server"))
     }
 
-    fun notifyDiagnostics() {
-        diagnostics
-            .map { result ->
-                Diagnostic().apply {
-                    source = result.location.uri
-                    message = result.message
-                    range = result.location.range
-                    severity = result.severity
-                    relatedInformation = result.highlightLocations.map { related ->
-                        DiagnosticRelatedInformation().apply {
-                            this.location = related
-                            message = "Data Flow Path"
-                        }
+    fun invalidateDiagnostics() {
+        diagnosticsAwaiter.complete(Unit)
+        diagnosticsAwaiter = CompletableFuture()
+    }
+
+    fun clearDiagnosticsForFile(filePath: Path) {
+        diagnostics = diagnostics.filter { it.location.uri.asFilePath != filePath }
+
+        val publishParams = PublishDiagnosticsParams().apply {
+            uri = filePath.toUri().toString()
+            diagnostics = emptyList()
+        }
+        client?.publishDiagnostics(publishParams)
+        System.err.println("server:\n$publishParams")
+    }
+
+    fun performAnalysis() {
+        fun publishDiagnostics() {
+            diagnostics
+                .map { result ->
+                    Diagnostic().apply {
+                        source = result.location.uri
+                        message = result.message
+                        range = result.location.range
+                        severity = result.severity
+                        relatedInformation = result.pathConditions
                     }
                 }
-            }
-            .groupBy { it.source }
-            .forEach { sourceUri, diags ->
-                val publishParams = PublishDiagnosticsParams().apply {
-                    uri = sourceUri
-                    diagnostics = diags
+                .groupBy { it.source }
+                .forEach { sourceUri, diags ->
+                    val publishParams = PublishDiagnosticsParams().apply {
+                        uri = sourceUri
+                        diagnostics = diags
+                    }
+                    client?.publishDiagnostics(publishParams)
+                    System.err.println("server:\n$publishParams")
                 }
-                client?.publishDiagnostics(publishParams)
-                System.err.println("server:\n$publishParams")
-            }
+        }
+
+        diagnostics = analyze(client, rulesDir, documentStore.rootFolder)
+        diagnosticsAwaiter.complete(Unit)
+        publishDiagnostics()
     }
 
     fun diagnosticsAt(filePath: Path, position: Position) =
@@ -117,8 +134,7 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
 
     override fun initialized(params: InitializedParams?) {
         super.initialized(params)
-        diagnostics = analyze(client, rulesDir, documentStore.rootFolder)
-        notifyDiagnostics()
+        performAnalysis()
     }
 }
 

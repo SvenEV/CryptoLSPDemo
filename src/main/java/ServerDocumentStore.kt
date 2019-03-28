@@ -2,6 +2,7 @@ import java.nio.file.Path
 
 data class CryptoTextDocumentState(val sourcePath: Path)
 
+/** Keeps track of files currently opened in the client */
 class ServerDocumentStore(val rootFolder: Path) {
     private val documentState = mutableMapOf<Path, CryptoTextDocumentState>()
 

@@ -9,13 +9,6 @@ class CryptoWorkspaceService(
 
     override fun didChangeWatchedFiles(args: DidChangeWatchedFilesParams) {
         server.notifyStaleResults("Files changed")
-        args.changes.forEach { change ->
-            when (change.type!!) {
-                FileChangeType.Created -> server.documentStore.add(change.uri.asFilePath)
-                FileChangeType.Deleted -> server.documentStore.remove(change.uri.asFilePath)
-                FileChangeType.Changed -> {} // Nothing to do
-            }
-        }
     }
 
     override fun didChangeConfiguration(args: DidChangeConfigurationParams) {

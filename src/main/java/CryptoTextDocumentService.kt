@@ -1,5 +1,4 @@
 import org.eclipse.lsp4j.*
-import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.TextDocumentService
 import java.util.concurrent.CompletableFuture
@@ -10,48 +9,60 @@ class CryptoTextDocumentService(
     private val rulesDir: String) : TextDocumentService {
 
     override fun didOpen(params: DidOpenTextDocumentParams) {
+        server.documentStore.add(params.textDocument.uri.asFilePath)
     }
 
     override fun didSave(params: DidSaveTextDocumentParams) {
     }
 
     override fun didClose(params: DidCloseTextDocumentParams) {
+        server.documentStore.remove(params.textDocument.uri.asFilePath)
     }
 
     override fun didChange(params: DidChangeTextDocumentParams) {
+        // Diagnostics are no longer valid after code changes
+        // (user must save the document to trigger re-analysis)
+        server.invalidateDiagnostics()
+        server.clearDiagnosticsForFile(params.textDocument.uri.asFilePath)
     }
 
     override fun documentHighlight(position: TextDocumentPositionParams): CompletableFuture<MutableList<out DocumentHighlight>> {
         val surroundingDiagnostic = server.diagnosticsAt(position.textDocument.uri.asFilePath, position.position).firstOrNull()
 
         return CompletableFuture.completedFuture(
-            surroundingDiagnostic?.highlightLocations?.mapNotNull {
-                if (it.uri.asFilePath == position.textDocument.uri.asFilePath)
-                    DocumentHighlight(it.range, DocumentHighlightKind.Read)
+            surroundingDiagnostic?.dataFlowPath?.mapNotNull {
+                if (it.location.uri.asFilePath == position.textDocument.uri.asFilePath)
+                    DocumentHighlight(it.location.range, DocumentHighlightKind.Read)
                 else
                     null
             }?.toMutableList() ?: mutableListOf())
     }
 
-    override fun hover(position: TextDocumentPositionParams?): CompletableFuture<Hover> {
-        return CompletableFuture.completedFuture(Hover(listOf()))
-    }
+    override fun codeLens(params: CodeLensParams): CompletableFuture<MutableList<out CodeLens>> {
+        // Wait until diagnostics are available, then compute code lenses
+        return server.diagnosticsAwaiter.thenApply {
+            val debugLens = CodeLens(
+                Range(Position(0, 0), Position(0, 0)),
+                KnownCommands.Debug.asCommand,
+                null)
 
-    override fun codeLens(params: CodeLensParams?): CompletableFuture<MutableList<out CodeLens>> {
-        val debugLens = CodeLens(
-            Range(Position(0, 0), Position(0, 0)),
-            KnownCommands.Debug.asCommand,
-            null)
+            val lenses = server.diagnostics
+                .asSequence()
+                .filter { it.location.uri.asFilePath == params.textDocument.uri.asFilePath }
+                .groupBy { it.location.range.start.line }
+                .map { (lineNumber, diags) ->
+                    val pos = Position(lineNumber, 0)
+                    val range = Range(pos, pos)
+                    val message = when (diags.size) {
+                        1 -> diags[0].summary
+                        else -> "${diags.size} problems"
+                    }
+                    CodeLens(range, Command(message, "cmd"), null)
+                }
+                .plus(debugLens)
+                .toMutableList()
 
-        val lenses = server.diagnostics
-            .map { CodeLens(it.location.range, Command(it.message.substring(0, it.message.indexOf(". ")), "cmd"), null) }
-            .plus(debugLens)
-            .toMutableList()
-
-        return CompletableFuture.completedFuture(lenses)
-    }
-
-    override fun documentSymbol(params: DocumentSymbolParams?): CompletableFuture<MutableList<Either<SymbolInformation, DocumentSymbol>>> {
-        return CompletableFuture.completedFuture(mutableListOf())
+            lenses
+        }
     }
 }
