@@ -1,4 +1,5 @@
 import com.ibm.wala.cast.tree.CAstSourcePositionMap
+import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import java.net.URI
@@ -6,9 +7,7 @@ import java.net.URL
 import java.nio.file.Path
 import java.nio.file.Paths
 
-data class SourceRange(val range: Range, val sourcePath: Path)
-
-/** Converts a WALA [CAstSourcePositionMap.Position] to an LSP [Range] */
+/** Converts a WALA [CAstSourcePositionMap.Position] to an LSP [Range], losing the association to the source document */
 val CAstSourcePositionMap.Position.asRange: Range
     get() {
         val start = Position(firstLine - 1, firstCol)
@@ -16,7 +15,8 @@ val CAstSourcePositionMap.Position.asRange: Range
         return Range(start, end)
     }
 
-val CAstSourcePositionMap.Position.asSourceRange: SourceRange get() = SourceRange(asRange, this.url.asFilePath)
+/** Converts a WALA [CAstSourcePositionMap.Position] to an LSP [Location] */
+val CAstSourcePositionMap.Position.asLocation: Location get() = Location(this.url.toStringWithWindowsFix(), asRange)
 
 /** Checks if a [Position] lies within a [Range] */
 fun Range.contains(pos: Position) =
@@ -25,7 +25,7 @@ fun Range.contains(pos: Position) =
         pos.character >= start.character &&
         pos.character <= end.character
 
-fun fixFileUriOnWindows(uri: String) = when {
+private fun fixFileUriOnWindows(uri: String) = when {
     System.getProperty("os.name").toLowerCase().indexOf("win") >= 0 && !uri.startsWith("file:///") ->
         // take care of uri in windows
         uri.replace("file://", "file:///")

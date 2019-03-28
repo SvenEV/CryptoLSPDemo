@@ -25,8 +25,8 @@ class CryptoTextDocumentService(
         val surroundingDiagnostic = server.diagnosticsAt(position.textDocument.uri.asFilePath, position.position).firstOrNull()
 
         return CompletableFuture.completedFuture(
-            surroundingDiagnostic?.highlightPositions?.mapNotNull {
-                if (it.sourcePath == position.textDocument.uri.asFilePath)
+            surroundingDiagnostic?.highlightLocations?.mapNotNull {
+                if (it.uri == position.textDocument.uri)
                     DocumentHighlight(it.range, DocumentHighlightKind.Read)
                 else
                     null

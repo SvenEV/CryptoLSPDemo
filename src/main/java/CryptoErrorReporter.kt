@@ -7,10 +7,11 @@ import de.upb.soot.frontends.java.PositionTag
 import magpiebridge.core.AnalysisResult
 import magpiebridge.core.Kind
 import org.eclipse.lsp4j.DiagnosticSeverity
+import org.eclipse.lsp4j.Location
 import soot.Unit
 import soot.tagkit.LineNumberTag
 
-class CogniCryptDiagnostic(val message: String, private val position: Position, val highlightPositions: List<SourceRange>) : AnalysisResult {
+class CogniCryptDiagnostic(val message: String, private val position: Position, val highlightLocations: List<Location>) : AnalysisResult {
     override fun repair() = ""
     override fun related() = emptyList<Pair<Position, String>>()
     override fun severity() = DiagnosticSeverity.Error
@@ -46,7 +47,7 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                         // TODO. get relatedInfo from crypto analysis.
                         val highlightPositions = when (error) {
                             is ErrorWithObjectAllocation -> error.dataFlowPath
-                                .mapNotNull { tryGetSourcePosition(it.stmt().unit.get())?.asSourceRange }
+                                .mapNotNull { tryGetSourcePosition(it.stmt().unit.get())?.asLocation }
                                 .toList()
                             else -> emptyList()
                         }
