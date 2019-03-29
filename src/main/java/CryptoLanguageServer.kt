@@ -36,17 +36,30 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     var rootPath: Path? = null
     var diagnostics: Collection<CogniCryptDiagnostic> = emptyList()
     var diagnosticsAwaiter: CompletableFuture<Unit> = CompletableFuture()
+    var autoReanalyze = false
 
     fun notifyStaleResults(msg: String) {
-        client?.showMessageRequest(ShowMessageRequestParams().apply {
-            type = MessageType.Info
-            message = "$msg, re-analyze?"
-            actions = listOf(
-                MessageActionItem("Re-Analyze")
-            )
-        })?.thenApply { action ->
-            if (action.title == "Re-Analyze") {
-                performAnalysis()
+        if (autoReanalyze) {
+            performAnalysis()
+        } else {
+            val optionOnce = "Re-Analyze"
+            val optionAlways = "Always (don't ask again)"
+
+            client?.showMessageRequest(ShowMessageRequestParams().apply {
+                type = MessageType.Info
+                message = "$msg, re-analyze?"
+                actions = listOf(
+                    MessageActionItem(optionOnce),
+                    MessageActionItem(optionAlways)
+                )
+            })?.thenApply { action ->
+                when (action.title) {
+                    optionOnce -> performAnalysis()
+                    optionAlways -> {
+                        performAnalysis()
+                        autoReanalyze = true
+                    }
+                }
             }
         }
     }
@@ -56,8 +69,8 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     }
 
     fun invalidateDiagnostics() {
-        diagnosticsAwaiter.complete(Unit)
-        diagnosticsAwaiter = CompletableFuture()
+        if (diagnosticsAwaiter.isDone)
+            diagnosticsAwaiter = CompletableFuture()
     }
 
     fun clearDiagnosticsForFile(filePath: Path) {

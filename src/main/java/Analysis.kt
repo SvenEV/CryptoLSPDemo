@@ -14,7 +14,6 @@ fun analyze(client: LanguageClient?, rulesDir: String, rootFolder: Path): Collec
         val transformer = CryptoTransformer(rulesDir)
         loadSourceCode(rootFolder)
         runSootPacks(transformer)
-        transformer.diagnostics.forEach { System.err.println(it) }
         transformer.diagnostics
     } catch (e: Exception) {
         val trace = ExceptionUtils.getStackTrace(e)

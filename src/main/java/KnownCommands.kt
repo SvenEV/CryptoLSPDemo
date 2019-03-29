@@ -1,6 +1,7 @@
 import org.eclipse.lsp4j.Command
 
 enum class KnownCommands(val id: String, val title: String) {
+    Reanalyze("reanalyze", "Re-Analyze"),
     Debug("lspdebug", "LSP Debug");
 
     val asCommand get() = Command(title, id)

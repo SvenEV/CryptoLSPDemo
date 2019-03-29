@@ -46,6 +46,11 @@ class CryptoTextDocumentService(
                 KnownCommands.Debug.asCommand,
                 null)
 
+            val reanalyzeLens = CodeLens(
+                Range(Position(0, 0), Position(0, 0)),
+                KnownCommands.Reanalyze.asCommand,
+                null)
+
             val lenses = server.diagnostics
                 .asSequence()
                 .filter { it.location.uri.asFilePath == params.textDocument.uri.asFilePath }
@@ -60,6 +65,7 @@ class CryptoTextDocumentService(
                     CodeLens(range, Command(message, "cmd"), null)
                 }
                 .plus(debugLens)
+                .plus(reanalyzeLens)
                 .toMutableList()
 
             lenses
