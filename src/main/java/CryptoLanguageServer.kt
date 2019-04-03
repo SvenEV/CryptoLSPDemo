@@ -1,9 +1,12 @@
 import org.eclipse.lsp4j.*
+import org.eclipse.lsp4j.jsonrpc.Launcher
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.LanguageServer
 import org.eclipse.lsp4j.services.WorkspaceService
+import soot.SootMethod
+import soot.jimple.toolkits.ide.icfg.AbstractJimpleBasedICFG
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -12,6 +15,14 @@ import java.net.Socket
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 
+data class MethodCodeLens(val method: SootMethod, val codeLens: CodeLens)
+
+data class AnalysisResults(
+    val diagnostics: Collection<CogniCryptDiagnostic>,
+    val methodCodeLenses: Map<Path, Collection<MethodCodeLens>>,
+    val icfg: AbstractJimpleBasedICFG
+)
+
 class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, LanguageClientAware {
     override fun shutdown() = CompletableFuture.completedFuture<Any>(null)!!
 
@@ -19,10 +30,10 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     }
 
     override fun connect(client: LanguageClient?) {
-        this.client = client
+        this.client = client as CryptoLanguageClient
     }
 
-    fun connect(client: LanguageClient?, socket: Socket) {
+    fun connect(client: CryptoLanguageClient?, socket: Socket) {
         connect(client)
         connectionSocket = socket
     }
@@ -31,10 +42,10 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     lateinit var documentStore: ServerDocumentStore
 
     val logger = Logger()
-    var client: LanguageClient? = null
+    var client: CryptoLanguageClient? = null
     var connectionSocket: Socket? = null
     var rootPath: Path? = null
-    var diagnostics: Collection<CogniCryptDiagnostic> = emptyList()
+    var analysisResults: AnalysisResults? = null
     var diagnosticsAwaiter: CompletableFuture<Unit> = CompletableFuture()
     var autoReanalyze = false
 
@@ -74,18 +85,21 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     }
 
     fun clearDiagnosticsForFile(filePath: Path) {
-        diagnostics = diagnostics.filter { it.location.uri.asFilePath != filePath }
+        val remainingDiagnostics = analysisResults?.diagnostics
+            ?.filter { it.location.uri.asFilePath != filePath }
+            ?: emptyList()
 
         val publishParams = PublishDiagnosticsParams().apply {
             uri = filePath.toUri().toString()
             diagnostics = emptyList()
         }
         client?.publishDiagnostics(publishParams)
+        analysisResults = analysisResults?.copy(diagnostics = remainingDiagnostics)
         System.err.println("server:\n$publishParams")
     }
 
     fun performAnalysis() {
-        fun publishDiagnostics() {
+        fun publishDiagnostics(diagnostics: Collection<CogniCryptDiagnostic>) {
             diagnostics
                 .map { result ->
                     Diagnostic().apply {
@@ -99,24 +113,45 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
                 .groupBy { it.source }
                 .forEach { sourceUri, diags ->
                     val publishParams = PublishDiagnosticsParams().apply {
-                        uri = sourceUri
-                        diagnostics = diags
+                        this.uri = sourceUri
+                        this.diagnostics = diags
                     }
                     client?.publishDiagnostics(publishParams)
                     System.err.println("server:\n$publishParams")
                 }
         }
 
-        diagnostics = analyze(client, rulesDir, documentStore.rootFolder)
+        val result = analyze(client, rulesDir, documentStore.rootFolder) ?: return
+        publishDiagnostics(result.diagnostics)
+
+        val methodCodeLenses = soot.Scene.v().classes
+            .flatMap { klass ->
+                klass.methods.mapNotNull { method ->
+                    val location = tryGetSourceLocation(method)
+                    if (location != null && location.range.start.line >= 0 && location.range.end.line >= 0)
+                        location.uri.asFilePath to MethodCodeLens(
+                            method,
+                            CodeLens(
+                                location.range,
+                                KnownCommands.ShowCfg.asCommand(method.signature),
+                                null
+                            )
+                        )
+                    else
+                        null
+                }
+            }
+            .groupBy({ it.first }) { it.second }
+
+        analysisResults = AnalysisResults(result.diagnostics, methodCodeLenses, result.icfg!!)
         diagnosticsAwaiter.complete(Unit)
-        publishDiagnostics()
     }
 
     fun diagnosticsAt(filePath: Path, position: Position) =
-        diagnostics.filter {
+        analysisResults?.diagnostics?.filter {
             it.location.uri.asFilePath == filePath &&
                 it.location.range.contains(position)
-        }
+        } ?: emptyList()
 
     override fun getTextDocumentService() = CryptoTextDocumentService(this, { client }, rulesDir)
 
@@ -156,15 +191,27 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
 // Launcher functions
 //
 
+fun createServerLauncher(server: LanguageServer, `in`: InputStream, out: OutputStream) =
+    LSPLauncher.Builder<CryptoLanguageClient>()
+        .setLocalService(server)
+        .setRemoteInterface(CryptoLanguageClient::class.java)
+        .setInput(`in`)
+        .setOutput(out)!!
+
+fun createServerLauncher(server: LanguageServer, `in`: InputStream, out: OutputStream, validate: Boolean, trace: PrintWriter) =
+    createServerLauncher(server, `in`, out)
+        .validateMessages(validate)
+        .traceMessages(trace)!!
+
 fun CryptoLanguageServer.launchOnStdio() =
     launchOnStream(System.`in`, System.out)
 
 fun CryptoLanguageServer.launchOnStream(inputStream: InputStream, outputStream: OutputStream) {
-    val launcher = LSPLauncher.createServerLauncher(this,
+    val launcher = createServerLauncher(this,
         inputStream.logStream("magpie.in"),
         outputStream.logStream("magpie.out"),
         true,
-        PrintWriter(System.err))
+        PrintWriter(System.err)).create()
     connect(launcher.remoteProxy)
     launcher.startListening()
 }
@@ -172,9 +219,9 @@ fun CryptoLanguageServer.launchOnStream(inputStream: InputStream, outputStream: 
 fun CryptoLanguageServer.launchOnSocketPort(host: String, port: Int) {
     try {
         val connectionSocket = Socket(host, port)
-        val launcher = LSPLauncher.createServerLauncher(this,
+        val launcher = createServerLauncher(this,
             connectionSocket.getInputStream().logStream("magpie.in"),
-            connectionSocket.getOutputStream().logStream("magpie.out"))
+            connectionSocket.getOutputStream().logStream("magpie.out")).create()
         connect(launcher.remoteProxy, connectionSocket)
         launcher.startListening()
     } catch (e: IOException) {

@@ -20,18 +20,6 @@ data class CogniCryptDiagnostic(
 class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
     lateinit var diagnostics: Collection<CogniCryptDiagnostic>
 
-    private fun tryGetSourceLocation(stmt: Unit): Location? {
-        val positionTag = stmt.getTag("PositionTag") as? PositionTag
-        if (positionTag != null)
-            return positionTag.position.asLocation
-        val lineNumberTag = stmt.getTag("LineNumberTag") as? LineNumberTag
-        if (lineNumberTag != null) {
-            val pos = Position(lineNumberTag.lineNumber - 1, 0)
-            return Location(null, Range(pos, pos)) // TODO: specify URI
-        }
-        return null
-    }
-
     override fun afterAnalysis() {
         diagnostics = this.errorMarkers.rowMap()
             .flatMap { klassMap ->

@@ -9,16 +9,16 @@ import soot.Transform
 import soot.Transformer
 import java.nio.file.Path
 
-fun analyze(client: LanguageClient?, rulesDir: String, rootFolder: Path): Collection<CogniCryptDiagnostic> =
+fun analyze(client: LanguageClient?, rulesDir: String, rootFolder: Path): CryptoTransformer? =
     try {
         val transformer = CryptoTransformer(rulesDir)
         loadSourceCode(rootFolder)
         runSootPacks(transformer)
-        transformer.diagnostics
+        transformer
     } catch (e: Exception) {
         val trace = ExceptionUtils.getStackTrace(e)
         client?.showMessage(MessageParams(MessageType.Error, "Analysis failed:\n$trace"))
-        emptyList()
+        null
     }
 
 private fun loadSourceCode(rootFolder: Path) {

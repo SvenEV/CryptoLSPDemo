@@ -1,3 +1,4 @@
+import boomerang.callgraph.ObservableICFG
 import boomerang.callgraph.ObservableStaticICFG
 import boomerang.preanalysis.BoomerangPretransformer
 import crypto.HeadlessCryptoScanner.CG
@@ -9,6 +10,9 @@ import crypto.rules.CryptSLRuleReader
 import soot.G
 import soot.Scene
 import soot.SceneTransformer
+import soot.SootMethod
+import soot.Unit
+import soot.jimple.toolkits.ide.icfg.AbstractJimpleBasedICFG
 import soot.jimple.toolkits.ide.icfg.JimpleBasedInterproceduralCFG
 import soot.options.Options
 import java.io.File
@@ -26,6 +30,7 @@ class CryptoTransformer(ruleDir: String) : SceneTransformer() {
     private val callGraphAlgorithm = CG.CHA
 
     val diagnostics get() = errorReporter.diagnostics
+    var icfg: AbstractJimpleBasedICFG? = null
 
     init {
         initilizeSootOptions()
@@ -47,7 +52,8 @@ class CryptoTransformer(ruleDir: String) : SceneTransformer() {
     override fun internalTransform(phaseName: String, options: Map<String, String>) {
         BoomerangPretransformer.v().reset()
         BoomerangPretransformer.v().apply()
-        val icfg = ObservableStaticICFG(JimpleBasedInterproceduralCFG(false))
+        icfg = JimpleBasedInterproceduralCFG(false)
+        val observableIcfg = ObservableStaticICFG(icfg)
         val rules = rules
 
         val reporter = CrySLResultsReporter().apply {
@@ -55,7 +61,7 @@ class CryptoTransformer(ruleDir: String) : SceneTransformer() {
         }
 
         val scanner = object : CryptoScanner() {
-            override fun icfg() = icfg
+            override fun icfg() = observableIcfg
             override fun getAnalysisListener() = reporter
             override fun isCommandLineMode() = true
             override fun rulesInSrcFormat() = false

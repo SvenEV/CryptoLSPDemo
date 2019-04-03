@@ -1,9 +1,15 @@
 import com.ibm.wala.cast.tree.CAstSourcePositionMap
+import crypto.pathconditions.ofType
+import de.upb.soot.frontends.java.DebuggingInformationTag
+import de.upb.soot.frontends.java.PositionTag
 import org.apache.commons.io.input.TeeInputStream
 import org.apache.commons.io.output.TeeOutputStream
 import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
+import soot.SootMethod
+import soot.Unit
+import soot.tagkit.LineNumberTag
 import java.io.*
 import java.net.URI
 import java.net.URL
@@ -31,6 +37,30 @@ fun Range.contains(pos: Position) =
         pos.line <= end.line &&
         pos.character >= start.character &&
         pos.character <= end.character
+
+/**
+ * Tries to determine the exact or approximate position of a statement in the source file
+ * by looking for a [PositionTag] or a [LineNumberTag].
+ */
+fun tryGetSourceLocation(stmt: Unit): Location? {
+    val positionTag = stmt.getTag("PositionTag") as? PositionTag
+    if (positionTag != null)
+        return positionTag.position.asLocation
+    val lineNumberTag = stmt.getTag("LineNumberTag") as? LineNumberTag
+    if (lineNumberTag != null) {
+        val pos = Position(lineNumberTag.lineNumber - 1, 0)
+        return Location(null, Range(pos, pos)) // TODO: specify URI
+    }
+    return null
+}
+
+/**
+ * Tries to determine the exact position of a method in the source file by looking for a [DebuggingInformationTag].
+ */
+fun tryGetSourceLocation(method: SootMethod) =
+    method.tags
+        .ofType<DebuggingInformationTag>()
+        .firstOrNull()?.debugInfo?.codeNamePosition?.asLocation
 
 
 //

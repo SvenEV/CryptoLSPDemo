@@ -41,6 +41,8 @@ class CryptoTextDocumentService(
     override fun codeLens(params: CodeLensParams): CompletableFuture<MutableList<out CodeLens>> {
         // Wait until diagnostics are available, then compute code lenses
         return server.diagnosticsAwaiter.thenApply {
+            val analysisResults = server.analysisResults!!
+
             val debugLens = CodeLens(
                 Range(Position(0, 0), Position(0, 0)),
                 KnownCommands.Debug.asCommand,
@@ -51,7 +53,11 @@ class CryptoTextDocumentService(
                 KnownCommands.Reanalyze.asCommand,
                 null)
 
-            val lenses = server.diagnostics
+            val methodLenses = analysisResults.methodCodeLenses[params.textDocument.uri.asFilePath]
+                ?.map { it.codeLens }
+                ?: emptyList()
+
+            val lenses = analysisResults.diagnostics
                 .asSequence()
                 .filter { it.location.uri.asFilePath == params.textDocument.uri.asFilePath }
                 .groupBy { it.location.range.start.line }
@@ -66,6 +72,7 @@ class CryptoTextDocumentService(
                 }
                 .plus(debugLens)
                 .plus(reanalyzeLens)
+                .plus(methodLenses)
                 .toMutableList()
 
             lenses

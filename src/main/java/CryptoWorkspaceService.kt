@@ -1,11 +1,12 @@
+import com.google.gson.JsonPrimitive
+import crypto.pathconditions.graphviz.toDotString
 import org.eclipse.lsp4j.*
-import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.WorkspaceService
 import java.util.concurrent.CompletableFuture
 
 class CryptoWorkspaceService(
     private val server: CryptoLanguageServer,
-    private val client: () -> LanguageClient?) : WorkspaceService {
+    private val client: () -> CryptoLanguageClient?) : WorkspaceService {
 
     override fun didChangeWatchedFiles(args: DidChangeWatchedFilesParams) {
         server.invalidateDiagnostics()
@@ -36,6 +37,24 @@ class CryptoWorkspaceService(
                 server.invalidateDiagnostics()
                 server.performAnalysis()
             }
+
+            KnownCommands.ShowCfg -> {
+                val methodSignature = (params.arguments.firstOrNull() as? JsonPrimitive)?.asString
+                val analysisResults = server.analysisResults!!
+                val method = analysisResults.methodCodeLenses
+                    .flatMap { it.value }
+                    .firstOrNull { it.method.signature == methodSignature }
+                    ?.method
+
+                if (method != null) {
+                    val dotString = analysisResults.icfg.toDotString(method)
+                    client()?.showCfg(ShowCfgParams(dotString))
+                } else {
+                    client()?.showMessage(MessageParams(MessageType.Error, "Didn't find method"))
+                }
+            }
+
+            null -> TODO()
         }
         return CompletableFuture.completedFuture(null)
     }
