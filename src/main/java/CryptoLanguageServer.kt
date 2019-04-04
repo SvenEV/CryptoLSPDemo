@@ -1,5 +1,4 @@
 import org.eclipse.lsp4j.*
-import org.eclipse.lsp4j.jsonrpc.Launcher
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
@@ -11,6 +10,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PrintWriter
+import java.net.ServerSocket
 import java.net.Socket
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
@@ -20,7 +20,13 @@ data class MethodCodeLens(val method: SootMethod, val codeLens: CodeLens)
 data class AnalysisResults(
     val diagnostics: Collection<CogniCryptDiagnostic>,
     val methodCodeLenses: Map<Path, Collection<MethodCodeLens>>,
-    val icfg: AbstractJimpleBasedICFG
+    val icfg: AbstractJimpleBasedICFG?
+)
+
+val defaultAnalysisResults = AnalysisResults(
+    emptyList(),
+    emptyMap(),
+    null
 )
 
 class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, LanguageClientAware {
@@ -45,31 +51,22 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     var client: CryptoLanguageClient? = null
     var connectionSocket: Socket? = null
     var rootPath: Path? = null
-    var analysisResults: AnalysisResults? = null
-    var diagnosticsAwaiter: CompletableFuture<Unit> = CompletableFuture()
-    var autoReanalyze = false
+    var analysisResults = defaultAnalysisResults
+    var analysisResultsAwaiter = CompletableFuture<Unit>()
+    var configuration = defaultConfiguration
 
     fun notifyStaleResults(msg: String) {
-        if (autoReanalyze) {
-            performAnalysis()
-        } else {
-            val optionOnce = "Re-Analyze"
-            val optionAlways = "Always (don't ask again)"
-
-            client?.showMessageRequest(ShowMessageRequestParams().apply {
-                type = MessageType.Info
-                message = "$msg, re-analyze?"
-                actions = listOf(
-                    MessageActionItem(optionOnce),
-                    MessageActionItem(optionAlways)
-                )
-            })?.thenApply { action ->
-                when (action.title) {
-                    optionOnce -> performAnalysis()
-                    optionAlways -> {
+        when (configuration.autoReanalyze) {
+            AutoReanalyze.Never -> {} // Nothing to do
+            AutoReanalyze.Always -> performAnalysis()
+            AutoReanalyze.AskEveryTime -> {
+                client?.showMessageRequest(ShowMessageRequestParams().apply {
+                    type = MessageType.Info
+                    message = "$msg, re-analyze? (You can change this behavior in the settings.)"
+                    actions = listOf(MessageActionItem("Re-Analyze"))
+                })?.thenApply { action ->
+                    if (action.title == "Re-Analyze")
                         performAnalysis()
-                        autoReanalyze = true
-                    }
                 }
             }
         }
@@ -80,21 +77,19 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     }
 
     fun invalidateDiagnostics() {
-        if (diagnosticsAwaiter.isDone)
-            diagnosticsAwaiter = CompletableFuture()
+        if (analysisResultsAwaiter.isDone)
+            analysisResultsAwaiter = CompletableFuture()
     }
 
     fun clearDiagnosticsForFile(filePath: Path) {
-        val remainingDiagnostics = analysisResults?.diagnostics
-            ?.filter { it.location.uri.asFilePath != filePath }
-            ?: emptyList()
+        val remainingDiagnostics = analysisResults.diagnostics.filter { it.location.uri.asFilePath != filePath }
 
         val publishParams = PublishDiagnosticsParams().apply {
             uri = filePath.toUri().toString()
             diagnostics = emptyList()
         }
         client?.publishDiagnostics(publishParams)
-        analysisResults = analysisResults?.copy(diagnostics = remainingDiagnostics)
+        analysisResults = analysisResults.copy(diagnostics = remainingDiagnostics)
         System.err.println("server:\n$publishParams")
     }
 
@@ -144,14 +139,14 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
             .groupBy({ it.first }) { it.second }
 
         analysisResults = AnalysisResults(result.diagnostics, methodCodeLenses, result.icfg!!)
-        diagnosticsAwaiter.complete(Unit)
+        analysisResultsAwaiter.complete(Unit)
     }
 
     fun diagnosticsAt(filePath: Path, position: Position) =
-        analysisResults?.diagnostics?.filter {
+        analysisResults.diagnostics.filter {
             it.location.uri.asFilePath == filePath &&
                 it.location.range.contains(position)
-        } ?: emptyList()
+        }
 
     override fun getTextDocumentService() = CryptoTextDocumentService(this, { client }, rulesDir)
 
@@ -164,6 +159,7 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
         this.rootPath = params.rootUri?.asFilePath
         documentStore = ServerDocumentStore(params.rootUri.asFilePath)
 
+        // Report server capabilities
         val result = InitializeResult(
             ServerCapabilities().apply {
                 setTextDocumentSync(TextDocumentSyncKind.Full)
@@ -182,7 +178,17 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
 
     override fun initialized(params: InitializedParams?) {
         super.initialized(params)
-        performAnalysis()
+
+        // Load configuration
+        requestConfiguration(client!!).thenApply {
+            configuration = it
+
+            client?.registerCapability(RegistrationParams(listOf(
+                Registration()
+            )))
+
+            performAnalysis()
+        }
     }
 }
 
@@ -216,9 +222,10 @@ fun CryptoLanguageServer.launchOnStream(inputStream: InputStream, outputStream: 
     launcher.startListening()
 }
 
-fun CryptoLanguageServer.launchOnSocketPort(host: String, port: Int) {
+fun CryptoLanguageServer.launchOnSocketPort(port: Int) {
     try {
-        val connectionSocket = Socket(host, port)
+        val serverSocket = ServerSocket(port)
+        val connectionSocket = serverSocket.accept()
         val launcher = createServerLauncher(this,
             connectionSocket.getInputStream().logStream("magpie.in"),
             connectionSocket.getOutputStream().logStream("magpie.out")).create()

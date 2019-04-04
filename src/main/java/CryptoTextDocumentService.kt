@@ -40,7 +40,7 @@ class CryptoTextDocumentService(
 
     override fun codeLens(params: CodeLensParams): CompletableFuture<MutableList<out CodeLens>> {
         // Wait until diagnostics are available, then compute code lenses
-        return server.diagnosticsAwaiter.thenApply {
+        return server.analysisResultsAwaiter.thenApply {
             val analysisResults = server.analysisResults!!
 
             val debugLens = CodeLens(

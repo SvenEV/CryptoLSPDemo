@@ -1,3 +1,4 @@
+import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import crypto.pathconditions.graphviz.toDotString
 import org.eclipse.lsp4j.*
@@ -21,6 +22,7 @@ class CryptoWorkspaceService(
     }
 
     override fun didChangeConfiguration(args: DidChangeConfigurationParams) {
+        server.configuration = configurationFromJson((args.settings as JsonObject)["cognicrypt"].asJsonObject)
     }
 
     override fun didChangeWorkspaceFolders(args: DidChangeWorkspaceFoldersParams) {
@@ -40,13 +42,13 @@ class CryptoWorkspaceService(
 
             KnownCommands.ShowCfg -> {
                 val methodSignature = (params.arguments.firstOrNull() as? JsonPrimitive)?.asString
-                val analysisResults = server.analysisResults!!
+                val analysisResults = server.analysisResults
                 val method = analysisResults.methodCodeLenses
                     .flatMap { it.value }
                     .firstOrNull { it.method.signature == methodSignature }
                     ?.method
 
-                if (method != null) {
+                if (method != null && analysisResults.icfg != null) {
                     val dotString = analysisResults.icfg.toDotString(method)
                     client()?.showCfg(ShowCfgParams(dotString))
                 } else {

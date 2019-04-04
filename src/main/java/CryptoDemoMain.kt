@@ -13,7 +13,10 @@ val ruleDirPath =
 object CryptoDemoMain {
     @JvmStatic
     fun main(args: Array<String>) {
-        CryptoLanguageServer(ruleDirPath).launchOnStdio()
+        if (args.contains("-socket"))
+            CryptoLanguageServer(ruleDirPath).launchOnSocketPort(5007)
+        else
+            CryptoLanguageServer(ruleDirPath).launchOnStdio()
     }
 }
 
