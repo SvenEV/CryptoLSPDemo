@@ -1,11 +1,11 @@
+package languageserver
+
 import boomerang.jimple.Statement
 import crypto.analysis.errors.ErrorWithObjectAllocation
 import crypto.pathconditions.expressions.WithContextFormat
 import crypto.reporting.PathConditionsErrorMarkerListener
 import de.upb.soot.frontends.java.PositionTag
 import org.eclipse.lsp4j.*
-import soot.Unit
-import soot.tagkit.LineNumberTag
 
 data class DataFlowPathItem(val location: Location, val statement: Statement)
 

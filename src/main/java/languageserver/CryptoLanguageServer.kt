@@ -1,11 +1,14 @@
+package languageserver
+
+import languageserver.workspace.AnalysisResults
+import languageserver.workspace.MethodCodeLens
+import languageserver.workspace.WorkspaceProject
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.LanguageServer
 import org.eclipse.lsp4j.services.WorkspaceService
-import soot.SootMethod
-import soot.jimple.toolkits.ide.icfg.AbstractJimpleBasedICFG
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -15,25 +18,10 @@ import java.net.Socket
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 
-data class MethodCodeLens(val method: SootMethod, val codeLens: CodeLens)
-
-data class AnalysisResults(
-    val diagnostics: Collection<CogniCryptDiagnostic>,
-    val methodCodeLenses: Map<Path, Collection<MethodCodeLens>>,
-    val icfg: AbstractJimpleBasedICFG?
-)
-
-val defaultAnalysisResults = AnalysisResults(
-    emptyList(),
-    emptyMap(),
-    null
-)
-
 class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, LanguageClientAware {
     override fun shutdown() = CompletableFuture.completedFuture<Any>(null)!!
 
-    override fun exit() {
-    }
+    override fun exit() {}
 
     override fun connect(client: LanguageClient?) {
         this.client = client as CryptoLanguageClient
@@ -50,9 +38,7 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     val logger = Logger()
     var client: CryptoLanguageClient? = null
     var connectionSocket: Socket? = null
-    var rootPath: Path? = null
-    var analysisResults = defaultAnalysisResults
-    var analysisResultsAwaiter = CompletableFuture<Unit>()
+    var project: WorkspaceProject? = null // represents the single workspace root folder opened in the editor (multi-root workspaces are not yet supported)
     var configuration = defaultConfiguration
 
     fun notifyStaleResults(msg: String) {
@@ -76,21 +62,9 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
         client?.showMessage(MessageParams(MessageType.Warning, "Multiple workspace folders are not supported by the CogniCrypt language server"))
     }
 
-    fun invalidateDiagnostics() {
-        if (analysisResultsAwaiter.isDone)
-            analysisResultsAwaiter = CompletableFuture()
-    }
-
     fun clearDiagnosticsForFile(filePath: Path) {
-        val remainingDiagnostics = analysisResults.diagnostics.filter { it.location.uri.asFilePath != filePath }
-
-        val publishParams = PublishDiagnosticsParams().apply {
-            uri = filePath.toUri().toString()
-            diagnostics = emptyList()
-        }
+        val publishParams = project!!.clearDiagnosticsForFile(filePath)
         client?.publishDiagnostics(publishParams)
-        analysisResults = analysisResults.copy(diagnostics = remainingDiagnostics)
-        System.err.println("server:\n$publishParams")
     }
 
     fun performAnalysis() {
@@ -116,7 +90,7 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
                 }
         }
 
-        val result = analyze(client, rulesDir, documentStore.rootFolder) ?: return
+        val result = analyze(client, rulesDir, project!!.projectPaths) ?: return
         publishDiagnostics(result.diagnostics)
 
         val methodCodeLenses = soot.Scene.v().classes
@@ -138,15 +112,9 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
             }
             .groupBy({ it.first }) { it.second }
 
-        analysisResults = AnalysisResults(result.diagnostics, methodCodeLenses, result.icfg!!)
-        analysisResultsAwaiter.complete(Unit)
+        project?.updateAnalysisResults(AnalysisResults(result.diagnostics, methodCodeLenses, result.icfg!!))
+        client?.setStatusBarMessage("")
     }
-
-    fun diagnosticsAt(filePath: Path, position: Position) =
-        analysisResults.diagnostics.filter {
-            it.location.uri.asFilePath == filePath &&
-                it.location.range.contains(position)
-        }
 
     override fun getTextDocumentService() = CryptoTextDocumentService(this, { client }, rulesDir)
 
@@ -156,8 +124,10 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
         logger.logClientMsg(params.toString())
         System.err.println("client:\n$params")
 
-        this.rootPath = params.rootUri?.asFilePath
-        documentStore = ServerDocumentStore(params.rootUri.asFilePath)
+        client?.setStatusBarMessage("Initializing project...")
+
+        project = WorkspaceProject.create(params.rootUri.asFilePath)
+        documentStore = ServerDocumentStore()
 
         // Report server capabilities
         val result = InitializeResult(
@@ -179,6 +149,8 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     override fun initialized(params: InitializedParams?) {
         super.initialized(params)
 
+        client?.setStatusBarMessage("Loading configuration...")
+
         // Load configuration
         requestConfiguration(client!!).thenApply {
             configuration = it
@@ -197,14 +169,14 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
 // Launcher functions
 //
 
-fun createServerLauncher(server: LanguageServer, `in`: InputStream, out: OutputStream) =
+private fun createServerLauncher(server: LanguageServer, `in`: InputStream, out: OutputStream) =
     LSPLauncher.Builder<CryptoLanguageClient>()
         .setLocalService(server)
         .setRemoteInterface(CryptoLanguageClient::class.java)
         .setInput(`in`)
         .setOutput(out)!!
 
-fun createServerLauncher(server: LanguageServer, `in`: InputStream, out: OutputStream, validate: Boolean, trace: PrintWriter) =
+private fun createServerLauncher(server: LanguageServer, `in`: InputStream, out: OutputStream, validate: Boolean, trace: PrintWriter) =
     createServerLauncher(server, `in`, out)
         .validateMessages(validate)
         .traceMessages(trace)!!

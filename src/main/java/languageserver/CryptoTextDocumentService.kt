@@ -1,3 +1,5 @@
+package languageserver
+
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.TextDocumentService
@@ -22,12 +24,12 @@ class CryptoTextDocumentService(
     override fun didChange(params: DidChangeTextDocumentParams) {
         // Diagnostics are no longer valid after code changes
         // (user must save the document to trigger re-analysis)
-        server.invalidateDiagnostics()
+        server.project?.invalidateDiagnostics()
         server.clearDiagnosticsForFile(params.textDocument.uri.asFilePath)
     }
 
     override fun documentHighlight(position: TextDocumentPositionParams): CompletableFuture<MutableList<out DocumentHighlight>> {
-        val surroundingDiagnostic = server.diagnosticsAt(position.textDocument.uri.asFilePath, position.position).firstOrNull()
+        val surroundingDiagnostic = server.project!!.diagnosticsAt(position.textDocument.uri.asFilePath, position.position).firstOrNull()
 
         return CompletableFuture.completedFuture(
             surroundingDiagnostic?.dataFlowPath?.mapNotNull {
@@ -40,8 +42,8 @@ class CryptoTextDocumentService(
 
     override fun codeLens(params: CodeLensParams): CompletableFuture<MutableList<out CodeLens>> {
         // Wait until diagnostics are available, then compute code lenses
-        return server.analysisResultsAwaiter.thenApply {
-            val analysisResults = server.analysisResults!!
+        return server.project!!.analysisResultsAwaiter.thenApply {
+            val analysisResults = server.project!!.analysisResults
 
             val debugLens = CodeLens(
                 Range(Position(0, 0), Position(0, 0)),
@@ -57,7 +59,7 @@ class CryptoTextDocumentService(
                 ?.map { it.codeLens }
                 ?: emptyList()
 
-            val lenses = analysisResults.diagnostics
+            val diagnosticLenses = analysisResults.diagnostics
                 .asSequence()
                 .filter { it.location.uri.asFilePath == params.textDocument.uri.asFilePath }
                 .groupBy { it.location.range.start.line }
@@ -70,12 +72,8 @@ class CryptoTextDocumentService(
                     }
                     CodeLens(range, Command(message, "cmd"), null)
                 }
-                .plus(debugLens)
-                .plus(reanalyzeLens)
-                .plus(methodLenses)
-                .toMutableList()
 
-            lenses
+            (diagnosticLenses + methodLenses + debugLens + reanalyzeLens).toMutableList()
         }
     }
 }

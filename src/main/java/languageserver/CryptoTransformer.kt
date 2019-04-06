@@ -1,4 +1,5 @@
-import boomerang.callgraph.ObservableICFG
+package languageserver
+
 import boomerang.callgraph.ObservableStaticICFG
 import boomerang.preanalysis.BoomerangPretransformer
 import crypto.HeadlessCryptoScanner.CG
@@ -10,8 +11,6 @@ import crypto.rules.CryptSLRuleReader
 import soot.G
 import soot.Scene
 import soot.SceneTransformer
-import soot.SootMethod
-import soot.Unit
 import soot.jimple.toolkits.ide.icfg.AbstractJimpleBasedICFG
 import soot.jimple.toolkits.ide.icfg.JimpleBasedInterproceduralCFG
 import soot.options.Options

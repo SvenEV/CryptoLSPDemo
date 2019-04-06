@@ -1,3 +1,5 @@
+package languageserver
+
 import com.google.gson.JsonObject
 import org.eclipse.lsp4j.ConfigurationItem
 import org.eclipse.lsp4j.ConfigurationParams
@@ -7,9 +9,9 @@ enum class AutoReanalyze {
 
     companion object {
         fun parse(s: String) = when (s) {
-            "always" -> AutoReanalyze.Always
-            "never" -> AutoReanalyze.Never
-            "ask" -> AutoReanalyze.AskEveryTime
+            "always" -> Always
+            "never" -> Never
+            "ask" -> AskEveryTime
             else -> defaultConfiguration.autoReanalyze
         }
     }

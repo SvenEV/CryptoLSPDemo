@@ -1,3 +1,5 @@
+package languageserver
+
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import crypto.pathconditions.graphviz.toDotString
@@ -10,7 +12,7 @@ class CryptoWorkspaceService(
     private val client: () -> CryptoLanguageClient?) : WorkspaceService {
 
     override fun didChangeWatchedFiles(args: DidChangeWatchedFilesParams) {
-        server.invalidateDiagnostics()
+        server.project?.invalidateDiagnostics()
         args.changes.forEach {
             when (it.type!!) {
                 FileChangeType.Created -> {}
@@ -36,13 +38,13 @@ class CryptoWorkspaceService(
                     .joinToString("\n") { it.sourcePath.toString() }))
 
             KnownCommands.Reanalyze -> {
-                server.invalidateDiagnostics()
+                server.project?.invalidateDiagnostics()
                 server.performAnalysis()
             }
 
             KnownCommands.ShowCfg -> {
                 val methodSignature = (params.arguments.firstOrNull() as? JsonPrimitive)?.asString
-                val analysisResults = server.analysisResults
+                val analysisResults = server.project!!.analysisResults
                 val method = analysisResults.methodCodeLenses
                     .flatMap { it.value }
                     .firstOrNull { it.method.signature == methodSignature }

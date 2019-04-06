@@ -1,3 +1,5 @@
+package languageserver
+
 import org.eclipse.lsp4j.Command
 
 enum class KnownCommands(val id: String, val title: String) {

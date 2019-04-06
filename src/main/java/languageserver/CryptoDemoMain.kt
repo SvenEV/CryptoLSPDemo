@@ -1,3 +1,5 @@
+package languageserver
+
 import org.eclipse.lsp4j.launch.websockets.LSPWebSocketServer
 import java.io.File
 import javax.websocket.OnError
