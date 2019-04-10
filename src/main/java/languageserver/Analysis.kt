@@ -16,15 +16,14 @@ import java.nio.file.Path
 fun analyze(client: CryptoLanguageClient?, rulesDir: String, projectPaths: ProjectPaths): CryptoTransformer? =
     try {
         val transformer = CryptoTransformer(rulesDir)
-        client?.setStatusBarMessage("Processing sources...")
+        client?.setStatusBarMessage(StatusMessage("Processing sources..."))
         loadSourceCode(projectPaths)
-        client?.setStatusBarMessage("CogniCrypt analysis...")
+        client?.setStatusBarMessage(StatusMessage("CogniCrypt analysis..."))
         runSootPacks(transformer)
         transformer
     } catch (e: Throwable) {
         val trace = ExceptionUtils.getStackTrace(e)
-        client?.setStatusBarMessage("Analysis failed")
-        client?.showMessage(MessageParams(MessageType.Error, "Analysis failed:\n$trace"))
+        client?.setStatusBarMessage(StatusMessage("Analysis failed, click for details", "# Exception\n```\n$trace\n```"))
         null
     }
 

@@ -141,7 +141,7 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
             .groupBy({ it.first }) { it.second }
 
         project?.updateAnalysisResults(AnalysisResults(result.diagnostics, methodCodeLenses, result.icfg!!))
-        client?.setStatusBarMessage("")
+        client?.setStatusBarMessage(null)
     }
 
     override fun getTextDocumentService() = CryptoTextDocumentService(this, { client }, rulesDir)
@@ -152,7 +152,7 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
         logger.logClientMsg(params.toString())
         System.err.println("client:\n$params")
 
-        client?.setStatusBarMessage("Initializing project...")
+        client?.setStatusBarMessage(StatusMessage("Initializing project..."))
 
         project = WorkspaceProject.create(params.rootUri.asFilePath)
         documentStore = ServerDocumentStore()
@@ -177,7 +177,28 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     override fun initialized(params: InitializedParams?) {
         super.initialized(params)
 
-        client?.setStatusBarMessage("Loading configuration...")
+        client?.publishTreeData(PublishTreeDataParams("cognicrypt.info", listOf(
+            TreeViewNode(
+                label = "📁 Source Path",
+                collapsibleState = TreeItemCollapsibleState.Expanded,
+                children = project!!.projectPaths.sourcePath.map {
+                    TreeViewNode(it.toString())
+                }),
+            TreeViewNode(
+                label = "📁 Library Path",
+                collapsibleState = TreeItemCollapsibleState.Expanded,
+                children = project!!.projectPaths.libraryPath.map {
+                    TreeViewNode(it.toString())
+                }),
+            TreeViewNode(
+                label = "📁 Class Path",
+                collapsibleState = TreeItemCollapsibleState.Expanded,
+                children = project!!.projectPaths.classPath.map {
+                    TreeViewNode(it.toString())
+                })
+        )))
+
+        client?.setStatusBarMessage(StatusMessage("Loading configuration..."))
 
         // Load configuration
         requestConfiguration(client!!).thenApply {

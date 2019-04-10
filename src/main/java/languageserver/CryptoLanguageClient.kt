@@ -10,12 +10,17 @@ data class PublishTreeDataParams(
     val rootItems: List<TreeViewNode>
 )
 
+data class StatusMessage(
+    val text: String,
+    val details: String? = null
+)
+
 interface CryptoLanguageClient : LanguageClient {
     @JsonNotification("cognicrypt/showCFG")
     fun showCfg(args: ShowCfgParams)
 
     @JsonNotification("cognicrypt/status")
-    fun setStatusBarMessage(args: String)
+    fun setStatusBarMessage(args: StatusMessage?)
 
     @JsonNotification("cognicrypt/treeData")
     fun publishTreeData(args: PublishTreeDataParams)
