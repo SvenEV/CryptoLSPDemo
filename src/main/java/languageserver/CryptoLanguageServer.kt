@@ -1,5 +1,6 @@
 package languageserver
 
+import crypto.pathconditions.debug.prettyPrintRefined
 import languageserver.workspace.AnalysisResults
 import languageserver.workspace.MethodCodeLens
 import languageserver.workspace.WorkspaceProject
@@ -43,7 +44,8 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
 
     fun notifyStaleResults(msg: String) {
         when (configuration.autoReanalyze) {
-            AutoReanalyze.Never -> {} // Nothing to do
+            AutoReanalyze.Never -> {
+            } // Nothing to do
             AutoReanalyze.Always -> performAnalysis()
             AutoReanalyze.AskEveryTime -> {
                 client?.showMessageRequest(ShowMessageRequestParams().apply {
@@ -88,6 +90,32 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
                     client?.publishDiagnostics(publishParams)
                     System.err.println("server:\n$publishParams")
                 }
+
+            val tree = diagnostics.map { diag ->
+                TreeViewNode(
+                    label = "⚠ ${diag.summary}",
+                    collapsibleState = TreeItemCollapsibleState.Collapsed,
+                    children = listOf(
+                        TreeViewNode(diag.message),
+                        TreeViewNode(
+                            label = "🏁 Data Flow Path",
+                            collapsibleState = TreeItemCollapsibleState.Collapsed,
+                            children = diag.dataFlowPath.map {
+                                TreeViewNode(
+                                    label = "◼ ${it.statement.prettyPrintRefined()}",
+                                    command = Command("Go To", "cognicrypt/goto", listOf(it.location)))
+                            }),
+                        TreeViewNode(
+                            label = "💡 Path Conditions",
+                            collapsibleState = TreeItemCollapsibleState.Collapsed,
+                            children = diag.pathConditions.map {
+                                TreeViewNode(it.message)
+                            })
+                    )
+                )
+            }
+
+            client?.publishTreeData(PublishTreeDataParams("cognicrypt.diagnostics", tree))
         }
 
         val result = analyze(client, rulesDir, project!!.projectPaths) ?: return
@@ -163,7 +191,6 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
         }
     }
 }
-
 
 //
 // Launcher functions
