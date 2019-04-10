@@ -3,6 +3,7 @@ package languageserver
 import boomerang.jimple.Statement
 import crypto.analysis.errors.ErrorWithObjectAllocation
 import crypto.pathconditions.expressions.WithContextFormat
+import crypto.pathconditions.ofType
 import crypto.reporting.PathConditionsErrorMarkerListener
 import de.upb.soot.frontends.java.PositionTag
 import org.eclipse.lsp4j.*
@@ -33,8 +34,12 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                             error.rule.className,
                             error.toErrorMarkerString())
 
+                        val relatedErrors = methodMap.value
+                            .filter { it.errorLocation.unit.get() == stmt }
+                            .ofType<ErrorWithObjectAllocation>()
+
                         val pathConditions = when (error) {
-                            is ErrorWithObjectAllocation -> error.pathConditions
+                            is ErrorWithObjectAllocation -> error.getPathConditions(relatedErrors)
                                 .map {
                                     DiagnosticRelatedInformation(
                                         location,
