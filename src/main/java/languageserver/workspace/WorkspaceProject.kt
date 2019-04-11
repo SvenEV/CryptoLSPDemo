@@ -70,16 +70,22 @@ data class WorkspaceProject(
         analysisResultsAwaiter.complete(Unit)
     }
 
-    fun clearDiagnosticsForFile(filePath: Path): PublishDiagnosticsParams {
+    fun clearDiagnosticsForFile(filePath: Path): PublishDiagnosticsParams? {
+        val oldCount = analysisResults.diagnostics.size
         val remainingDiagnostics = analysisResults.diagnostics.filter { it.location.uri.asFilePath != filePath }
 
-        val publishParams = PublishDiagnosticsParams().apply {
-            uri = filePath.toUri().toString()
-            diagnostics = emptyList()
+        if (remainingDiagnostics.size < oldCount) {
+            val publishParams = PublishDiagnosticsParams().apply {
+                uri = filePath.toUri().toString()
+                diagnostics = emptyList()
+            }
+            analysisResults = analysisResults.copy(diagnostics = remainingDiagnostics)
+            System.err.println("server:\n$publishParams")
+            return publishParams
+        } else {
+            // No diagnostics were cleared, no need to notify client
+            return null
         }
-        analysisResults = analysisResults.copy(diagnostics = remainingDiagnostics)
-        System.err.println("server:\n$publishParams")
-        return publishParams
     }
 
     companion object {

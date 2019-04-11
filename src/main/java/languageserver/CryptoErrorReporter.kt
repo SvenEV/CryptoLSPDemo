@@ -2,7 +2,7 @@ package languageserver
 
 import boomerang.jimple.Statement
 import crypto.analysis.errors.ErrorWithObjectAllocation
-import crypto.pathconditions.expressions.WithContextFormat
+import crypto.pathconditions.expressions.ContextFormat
 import crypto.pathconditions.ofType
 import crypto.reporting.PathConditionsErrorMarkerListener
 import de.upb.soot.frontends.java.PositionTag
@@ -43,7 +43,7 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                                 .map {
                                     DiagnosticRelatedInformation(
                                         location,
-                                        it.condition.prettyPrint(WithContextFormat.ContextFree)
+                                        it.condition.prettyPrint(ContextFormat.ContextFree)
                                     )
                                 }
                             else -> emptyList()

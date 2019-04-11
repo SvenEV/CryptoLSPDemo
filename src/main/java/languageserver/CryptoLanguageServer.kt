@@ -66,7 +66,8 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
 
     fun clearDiagnosticsForFile(filePath: Path) {
         val publishParams = project!!.clearDiagnosticsForFile(filePath)
-        client?.publishDiagnostics(publishParams)
+        if (publishParams != null)
+            client?.publishDiagnostics(publishParams)
     }
 
     fun performAnalysis() {
