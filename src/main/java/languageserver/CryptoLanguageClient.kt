@@ -7,7 +7,8 @@ data class ShowCfgParams(val dotString: String)
 
 data class PublishTreeDataParams(
     val viewId: String,
-    val rootItems: List<TreeViewNode>
+    val rootItems: List<TreeViewNode>,
+    val focus: Boolean = false
 )
 
 data class StatusMessage(

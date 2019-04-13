@@ -2,6 +2,7 @@ package languageserver
 
 import crypto.pathconditions.debug.prettyPrintRefined
 import languageserver.workspace.AnalysisResults
+import languageserver.workspace.DiagnosticsTree
 import languageserver.workspace.MethodCodeLens
 import languageserver.workspace.WorkspaceProject
 import org.eclipse.lsp4j.*
@@ -92,30 +93,7 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
                     System.err.println("server:\n$publishParams")
                 }
 
-            val tree = diagnostics.map { diag ->
-                TreeViewNode(
-                    label = "⚠ ${diag.summary}",
-                    collapsibleState = TreeItemCollapsibleState.Collapsed,
-                    children = listOf(
-                        TreeViewNode(diag.message),
-                        TreeViewNode(
-                            label = "🏁 Data Flow Path",
-                            collapsibleState = TreeItemCollapsibleState.Collapsed,
-                            children = diag.dataFlowPath.map {
-                                TreeViewNode(
-                                    label = "◼ ${it.statement.prettyPrintRefined()}",
-                                    command = Command("Go To", "cognicrypt/goto", listOf(it.location)))
-                            }),
-                        TreeViewNode(
-                            label = "💡 Path Conditions",
-                            collapsibleState = TreeItemCollapsibleState.Collapsed,
-                            children = diag.pathConditions.map {
-                                TreeViewNode(it.message)
-                            })
-                    )
-                )
-            }
-
+            val tree = DiagnosticsTree.buildTree(diagnostics)
             client?.publishTreeData(PublishTreeDataParams("cognicrypt.diagnostics", tree))
         }
 
@@ -164,7 +142,9 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
                 setTextDocumentSync(TextDocumentSyncKind.Full)
                 documentHighlightProvider = true
                 codeLensProvider = CodeLensOptions().apply { isResolveProvider = true }
-                executeCommandProvider = ExecuteCommandOptions(KnownCommands.values().map { it.id })
+                executeCommandProvider = ExecuteCommandOptions(KnownCommands.values()
+                    .filter { it.commandHandlerSite == CommandHandlerSite.Server }
+                    .map { it.id })
                 workspace = WorkspaceServerCapabilities(WorkspaceFoldersOptions().apply {
                     setChangeNotifications(true)
                 })

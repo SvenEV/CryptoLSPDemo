@@ -1,8 +1,10 @@
 package languageserver
 
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import crypto.pathconditions.graphviz.toDotString
+import languageserver.workspace.DiagnosticsTree
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.WorkspaceService
 import java.util.concurrent.CompletableFuture
@@ -56,6 +58,19 @@ class CryptoWorkspaceService(
                 } else {
                     client()?.showMessage(MessageParams(MessageType.Error, "Didn't find method"))
                 }
+            }
+
+            KnownCommands.FilterDiagnostics -> {
+                val ids = (params.arguments.firstOrNull() as? JsonArray)?.map { it.asNumber.toInt() } ?: emptyList()
+                val tree =
+                    if (ids.any()) {
+                        val diagnosticsFiltered = server.project!!.analysisResults.diagnostics.filter { it.id in ids }
+                        val filterHeader = TreeViewNode("❌ Clear Filter", command = KnownCommands.FilterDiagnostics.asCommand())
+                        listOf(filterHeader) + DiagnosticsTree.buildTree(diagnosticsFiltered)
+                    } else {
+                        DiagnosticsTree.buildTree(server.project!!.analysisResults.diagnostics)
+                    }
+                client()?.publishTreeData(PublishTreeDataParams("cognicrypt.diagnostics", tree, focus = true))
             }
 
             null -> TODO()

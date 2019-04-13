@@ -4,14 +4,9 @@ import de.upb.soot.frontends.java.JimpleConverter
 import de.upb.soot.frontends.java.WalaClassLoader
 import languageserver.workspace.ProjectPaths
 import org.apache.commons.lang3.exception.ExceptionUtils
-import org.eclipse.lsp4j.MessageParams
-import org.eclipse.lsp4j.MessageType
-import org.eclipse.lsp4j.services.LanguageClient
 import soot.PackManager
 import soot.Transform
 import soot.Transformer
-import java.lang.RuntimeException
-import java.nio.file.Path
 
 fun analyze(client: CryptoLanguageClient?, rulesDir: String, projectPaths: ProjectPaths): CryptoTransformer? =
     try {

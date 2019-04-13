@@ -11,6 +11,7 @@ import org.eclipse.lsp4j.*
 data class DataFlowPathItem(val location: Location, val statement: Statement)
 
 data class CogniCryptDiagnostic(
+    val id: Int,
     val summary: String,
     val message: String,
     val severity: DiagnosticSeverity,
@@ -22,6 +23,7 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
     lateinit var diagnostics: Collection<CogniCryptDiagnostic>
 
     override fun afterAnalysis() {
+        var id = 0
         diagnostics = this.errorMarkers.rowMap()
             .flatMap { klassMap ->
                 klassMap.value.flatMap { methodMap ->
@@ -60,7 +62,7 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                             else -> emptyList()
                         }
 
-                        CogniCryptDiagnostic(error.javaClass.simpleName, message, DiagnosticSeverity.Error, location, pathConditions, dataFlowPath)
+                        CogniCryptDiagnostic(id++, error.javaClass.simpleName, message, DiagnosticSeverity.Error, location, pathConditions, dataFlowPath)
                     }
                 }
             }

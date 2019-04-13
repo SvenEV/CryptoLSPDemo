@@ -70,7 +70,7 @@ class CryptoTextDocumentService(
                         1 -> diags[0].summary
                         else -> "${diags.size} problems"
                     }
-                    CodeLens(range, Command(message, "cmd"), null)
+                    CodeLens(range, KnownCommands.FilterDiagnostics.asCommandWithTitle(message, diags.map { it.id }), null)
                 }
 
             (diagnosticLenses + methodLenses + debugLens + reanalyzeLens).toMutableList()
