@@ -3,6 +3,7 @@ package languageserver
 import com.ibm.wala.cast.tree.CAstSourcePositionMap
 import crypto.pathconditions.ofType
 import de.upb.soot.frontends.java.DebuggingInformationTag
+import de.upb.soot.frontends.java.PositionInfoTag
 import de.upb.soot.frontends.java.PositionTag
 import org.apache.commons.io.input.TeeInputStream
 import org.apache.commons.io.output.TeeOutputStream
@@ -15,8 +16,10 @@ import soot.tagkit.LineNumberTag
 import java.io.*
 import java.net.URI
 import java.net.URL
+import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import kotlin.streams.asSequence
 
 //
 // Source code position conversions (between WALA and LSP types)
@@ -42,28 +45,51 @@ fun Range.contains(pos: Position) =
 
 /**
  * Tries to determine the exact or approximate position of a statement in the source file
- * by looking for a [PositionTag] or a [LineNumberTag].
+ * by looking for a [PositionTag], [PositionInfoTag] or a [LineNumberTag].
  */
-fun tryGetSourceLocation(stmt: Unit): Location? {
-    val positionTag = stmt.getTag("PositionTag") as? PositionTag
-    if (positionTag != null)
-        return positionTag.position.asLocation
-    val lineNumberTag = stmt.getTag("LineNumberTag") as? LineNumberTag
-    if (lineNumberTag != null) {
-        val pos = Position(lineNumberTag.lineNumber - 1, 0)
-        return Location(null, Range(pos, pos)) // TODO: specify URI
-    }
-    return null
-}
+val Unit.sourceLocation get() =
+    tags.ofType<PositionTag>().firstOrNull()?.position?.asLocation
+        ?: tags.ofType<PositionInfoTag>().firstOrNull()?.positionInfo?.stmtPosition?.asLocation
+        ?: tags.ofType<LineNumberTag>().firstOrNull()?.let { tag ->
+            val pos = Position(tag.lineNumber - 1, 0)
+            Location(null, Range(pos, pos)) // TODO: specify URI
+        }
 
 /**
  * Tries to determine the exact position of a method in the source file by looking for a [DebuggingInformationTag].
  */
-fun tryGetSourceLocation(method: SootMethod) =
-    method.tags
-        .ofType<DebuggingInformationTag>()
-        .firstOrNull()?.debugInfo?.codeNamePosition?.asLocation
+val SootMethod.sourceLocation get() = tags
+    .ofType<DebuggingInformationTag>()
+    .firstOrNull()?.debugInfo?.codeNamePosition?.asLocation
 
+/**
+ * Reads exactly the part of a file represented by the given [Location].
+ * @param asSingleLine If true, ranges spanning multiple lines are merged into a single line
+ */
+fun readRangeFromFile(location: Location?, asSingleLine: Boolean = false): String? {
+    if (location?.uri == null || location.range.end.line < location.range.start.line)
+        return null
+
+    val numLines = location.range.end.line - location.range.start.line + 1
+
+    val linesInRange = Files.lines(location.uri.asFilePath)
+        .asSequence()
+        .drop(location.range.start.line)
+        .take(numLines)
+        .mapIndexed { i, line ->
+            when {
+                numLines == 1 -> line.substring(location.range.start.character until location.range.end.character)
+                i == 0 -> line.substring(location.range.start.character)
+                i == numLines - 1 -> line.substring(0 until location.range.end.character)
+                else -> line
+            }
+        }
+
+    return if (asSingleLine)
+        linesInRange.map { it.trim() }.joinToString("")
+    else
+        linesInRange.joinToString(System.lineSeparator())
+}
 
 //
 // File URI conversions

@@ -22,7 +22,7 @@ object DiagnosticsTree {
                                     collapsibleState = TreeItemCollapsibleState.Collapsed,
                                     children = diag.dataFlowPath.map {
                                         TreeViewNode(
-                                            label = "◼ ${it.statement.prettyPrintRefined()}",
+                                            label = "◼ ${readRangeFromFile(it.location, true) ?: it.statement.prettyPrintRefined()}",
                                             command = KnownCommands.GoToStatement.asCommand(it.location))
                                     }),
                                 TreeViewNode(

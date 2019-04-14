@@ -1,6 +1,5 @@
 package languageserver.workspace
 
-import de.upb.soot.Project
 import languageserver.CogniCryptDiagnostic
 import languageserver.asFilePath
 import languageserver.contains

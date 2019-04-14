@@ -103,7 +103,7 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
         val methodCodeLenses = soot.Scene.v().classes
             .flatMap { klass ->
                 klass.methods.mapNotNull { method ->
-                    val location = tryGetSourceLocation(method)
+                    val location = method.sourceLocation
                     if (location != null && location.range.start.line >= 0 && location.range.end.line >= 0)
                         location.uri.asFilePath to MethodCodeLens(
                             method,

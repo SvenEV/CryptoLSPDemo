@@ -5,8 +5,9 @@ import crypto.analysis.errors.ErrorWithObjectAllocation
 import crypto.pathconditions.expressions.ContextFormat
 import crypto.pathconditions.ofType
 import crypto.reporting.PathConditionsErrorMarkerListener
-import de.upb.soot.frontends.java.PositionTag
-import org.eclipse.lsp4j.*
+import org.eclipse.lsp4j.DiagnosticRelatedInformation
+import org.eclipse.lsp4j.DiagnosticSeverity
+import org.eclipse.lsp4j.Location
 
 data class DataFlowPathItem(val location: Location, val statement: Statement)
 
@@ -29,7 +30,6 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                 klassMap.value.flatMap { methodMap ->
                     methodMap.value.map { error ->
                         val stmt = error.errorLocation.unit.get()
-                        val location = (stmt.getTag("PositionTag") as PositionTag).position.asLocation
 
                         val message = String.format("%s violating CrySL rule for %s:\n%s",
                             error.javaClass.simpleName,
@@ -44,7 +44,7 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                             is ErrorWithObjectAllocation -> error.getPathConditions(relatedErrors)
                                 .map {
                                     DiagnosticRelatedInformation(
-                                        location,
+                                        stmt.sourceLocation,
                                         it.condition.prettyPrint(ContextFormat.ContextFree)
                                     )
                                 }
@@ -54,7 +54,7 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                         val dataFlowPath = when (error) {
                             is ErrorWithObjectAllocation -> error.dataFlowPath
                                 .mapNotNull {
-                                    tryGetSourceLocation(it.stmt().unit.get())?.let { location ->
+                                    it.stmt().unit.get().sourceLocation?.let { location ->
                                         DataFlowPathItem(location, it.stmt())
                                     }
                                 }
@@ -62,7 +62,14 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                             else -> emptyList()
                         }
 
-                        CogniCryptDiagnostic(id++, error.javaClass.simpleName, message, DiagnosticSeverity.Error, location, pathConditions, dataFlowPath)
+                        CogniCryptDiagnostic(
+                            id++,
+                            error.javaClass.simpleName,
+                            message,
+                            DiagnosticSeverity.Error,
+                            stmt.sourceLocation!!,
+                            pathConditions,
+                            dataFlowPath)
                     }
                 }
             }
