@@ -23,10 +23,10 @@ data class Configuration(
 
 val defaultConfiguration = Configuration(AutoReanalyze.AskEveryTime)
 
-fun requestConfiguration(client: CryptoLanguageClient) = client
+fun requestConfiguration(client: CryptoLanguageClient, scope: String) = client
     .configuration(ConfigurationParams(listOf(
         ConfigurationItem().apply {
-            scopeUri = ""
+            scopeUri = scope
             section = "cognicrypt"
         }
     )))

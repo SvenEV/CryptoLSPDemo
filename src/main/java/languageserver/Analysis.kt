@@ -1,6 +1,7 @@
 package languageserver
 
 import com.github.javaparser.JavaParser
+import com.github.javaparser.ast.body.MethodDeclaration
 import com.github.javaparser.ast.expr.AssignExpr
 import crypto.pathconditions.MethodParameterInfo
 import de.upb.soot.frontends.java.JimpleConverter
@@ -63,8 +64,9 @@ fun fixLocalVariableNamesInAllClasses() {
                 ?.run { parser.parseBodyDeclaration(this) }
                 ?.result
                 ?.ifPresent { decl ->
-                    val paramNames = decl.asMethodDeclaration().parameters.map { it.name.asString() }
-                    methodBody.method.addTag(MethodParameterInfo(paramNames))
+                    val paramNames = (decl as? MethodDeclaration)?.parameters?.map { it.name.asString() }
+                    if (paramNames != null)
+                        methodBody.method.addTag(MethodParameterInfo(paramNames))
                 }
 
             // For each AssignStmts with a local as left operand, extract the variable name from source code

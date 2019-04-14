@@ -182,7 +182,7 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
         client?.setStatusBarMessage(StatusMessage("Loading configuration..."))
 
         // Load configuration
-        requestConfiguration(client!!).thenApply {
+        requestConfiguration(client!!, project!!.rootPath.toUri().toString()).thenApply {
             configuration = it
 
             client?.registerCapability(RegistrationParams(listOf(
