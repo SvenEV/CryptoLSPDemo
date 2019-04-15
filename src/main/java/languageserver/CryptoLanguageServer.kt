@@ -1,6 +1,5 @@
 package languageserver
 
-import crypto.pathconditions.debug.prettyPrintRefined
 import languageserver.workspace.AnalysisResults
 import languageserver.workspace.DiagnosticsTree
 import languageserver.workspace.MethodCodeLens
@@ -225,13 +224,15 @@ fun CryptoLanguageServer.launchOnStream(inputStream: InputStream, outputStream: 
 
 fun CryptoLanguageServer.launchOnSocketPort(port: Int) {
     try {
-        val serverSocket = ServerSocket(port)
-        val connectionSocket = serverSocket.accept()
-        val launcher = createServerLauncher(this,
-            connectionSocket.getInputStream().logStream("magpie.in"),
-            connectionSocket.getOutputStream().logStream("magpie.out")).create()
-        connect(launcher.remoteProxy, connectionSocket)
-        launcher.startListening()
+        ServerSocket(port).use { serverSocket ->
+            serverSocket.accept().use { connectionSocket ->
+                val launcher = createServerLauncher(this,
+                    connectionSocket.getInputStream().logStream("magpie.in"),
+                    connectionSocket.getOutputStream().logStream("magpie.out")).create()
+                connect(launcher.remoteProxy, connectionSocket)
+                launcher.startListening().get()
+            }
+        }
     } catch (e: IOException) {
         e.printStackTrace()
     }

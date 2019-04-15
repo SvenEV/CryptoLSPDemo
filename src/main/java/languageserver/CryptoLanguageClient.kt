@@ -1,21 +1,13 @@
 package languageserver
 
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
+import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
 import org.eclipse.lsp4j.services.LanguageClient
+import java.util.concurrent.CompletableFuture
 
-data class ShowCfgParams(val dotString: String)
-
-data class PublishTreeDataParams(
-    val viewId: String,
-    val rootItems: List<TreeViewNode>,
-    val focus: Boolean = false
-)
-
-data class StatusMessage(
-    val text: String,
-    val details: String? = null
-)
-
+/**
+ * Extends the [LanguageClient] interface with CogniCrypt-specific protocol extensions.
+ */
 interface CryptoLanguageClient : LanguageClient {
     @JsonNotification("cognicrypt/showCFG")
     fun showCfg(args: ShowCfgParams)
@@ -25,4 +17,10 @@ interface CryptoLanguageClient : LanguageClient {
 
     @JsonNotification("cognicrypt/treeData")
     fun publishTreeData(args: PublishTreeDataParams)
+
+    @JsonRequest("cognicrypt/quickPick")
+    fun quickPick(args: QuickPickParams): CompletableFuture<QuickPickResult>
+
+    @JsonNotification("cognicrypt/showTextDocument")
+    fun showTextDocument(args: ShowTextDocumentParams)
 }

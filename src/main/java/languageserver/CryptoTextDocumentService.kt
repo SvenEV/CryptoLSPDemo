@@ -31,29 +31,27 @@ class CryptoTextDocumentService(
     override fun documentHighlight(position: TextDocumentPositionParams): CompletableFuture<MutableList<out DocumentHighlight>> {
         val surroundingDiagnostic = server.project!!.diagnosticsAt(position.textDocument.uri.asFilePath, position.position).firstOrNull()
 
-        return CompletableFuture.completedFuture(
-            surroundingDiagnostic?.dataFlowPath?.mapNotNull {
-                if (it.location.uri.asFilePath == position.textDocument.uri.asFilePath)
-                    DocumentHighlight(it.location.range, DocumentHighlightKind.Read)
-                else
-                    null
-            }?.toMutableList() ?: mutableListOf())
+        val dataFlowPath = surroundingDiagnostic?.dataFlowPath?.mapNotNull {
+            if (it.location.uri.asFilePath == position.textDocument.uri.asFilePath)
+                DocumentHighlight(it.location.range, DocumentHighlightKind.Read)
+            else
+                null
+        }?.asSequence() ?: emptySequence()
+
+        val ifStatements = surroundingDiagnostic?.pathConditions?.mapNotNull {
+            if (it.location.uri.asFilePath == position.textDocument.uri.asFilePath)
+                DocumentHighlight(it.location.range, DocumentHighlightKind.Text)
+            else
+                null
+        }?.asSequence() ?: emptySequence()
+
+        return CompletableFuture.completedFuture((dataFlowPath + ifStatements).toMutableList())
     }
 
     override fun codeLens(params: CodeLensParams): CompletableFuture<MutableList<out CodeLens>> {
         // Wait until diagnostics are available, then compute code lenses
         return server.project!!.analysisResultsAwaiter.thenApply {
             val analysisResults = server.project!!.analysisResults
-
-            val debugLens = CodeLens(
-                Range(Position(0, 0), Position(0, 0)),
-                KnownCommands.Debug.asCommand,
-                null)
-
-            val reanalyzeLens = CodeLens(
-                Range(Position(0, 0), Position(0, 0)),
-                KnownCommands.Reanalyze.asCommand,
-                null)
 
             val methodLenses = analysisResults.methodCodeLenses[params.textDocument.uri.asFilePath]
                 ?.map { it.codeLens }
@@ -73,7 +71,7 @@ class CryptoTextDocumentService(
                     CodeLens(range, KnownCommands.FilterDiagnostics.asCommandWithTitle(message, diags.map { it.id }), null)
                 }
 
-            (diagnosticLenses + methodLenses + debugLens + reanalyzeLens).toMutableList()
+            (diagnosticLenses + methodLenses).toMutableList()
         }
     }
 }

@@ -8,6 +8,7 @@ import crypto.reporting.PathConditionsErrorMarkerListener
 import org.eclipse.lsp4j.DiagnosticRelatedInformation
 import org.eclipse.lsp4j.DiagnosticSeverity
 import org.eclipse.lsp4j.Location
+import soot.jimple.IfStmt
 
 data class DataFlowPathItem(val location: Location, val statement: Statement)
 
@@ -42,11 +43,14 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
 
                         val pathConditions = when (error) {
                             is ErrorWithObjectAllocation -> error.getPathConditions(relatedErrors)
-                                .map {
-                                    DiagnosticRelatedInformation(
-                                        stmt.sourceLocation,
-                                        it.condition.prettyPrint(ContextFormat.ContextFree)
-                                    )
+                                .flatMap {
+                                    // TODO: This is not ideal: If a single path condition covers multiple ifs, we report it for every covered if
+                                    it.branchStatements.map { ifStmt ->
+                                        DiagnosticRelatedInformation(
+                                            ifStmt.unit.get().sourceLocation,
+                                            it.condition.prettyPrint(ContextFormat.ContextFree)
+                                        )
+                                    }
                                 }
                             else -> emptyList()
                         }

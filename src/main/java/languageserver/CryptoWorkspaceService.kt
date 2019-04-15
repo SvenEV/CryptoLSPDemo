@@ -3,7 +3,9 @@ package languageserver
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
+import crypto.pathconditions.debug.prettyPrint
 import crypto.pathconditions.graphviz.toDotString
+import javafx.scene.Scene
 import languageserver.workspace.DiagnosticsTree
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.WorkspaceService
@@ -35,10 +37,6 @@ class CryptoWorkspaceService(
 
     override fun executeCommand(params: ExecuteCommandParams): CompletableFuture<Any> {
         when (KnownCommands.tryParse(params.command)) {
-            KnownCommands.Debug ->
-                client()?.showMessage(MessageParams(MessageType.Info, "Watched files:\n" + server.documentStore.documents
-                    .joinToString("\n") { it.sourcePath.toString() }))
-
             KnownCommands.Reanalyze -> {
                 server.project?.invalidateDiagnostics()
                 server.performAnalysis()
@@ -71,6 +69,19 @@ class CryptoWorkspaceService(
                         DiagnosticsTree.buildTree(server.project!!.analysisResults.diagnostics)
                     }
                 client()?.publishTreeData(PublishTreeDataParams("cognicrypt.diagnostics", tree, focus = true))
+            }
+
+            KnownCommands.InspectJimple -> {
+                val availableClasses = soot.Scene.v().classes.map { it.name }
+                client()?.quickPick(QuickPickParams(availableClasses, "Show Jimple code of class..."))?.thenAccept { result ->
+                    val selectedClass = soot.Scene.v().getSootClass(result.selectedItem)
+                    if (selectedClass != null) {
+                        client()?.showTextDocument(ShowTextDocumentParams(
+                            content = selectedClass.prettyPrint(),
+                            language = "java"
+                        ))
+                    }
+                }
             }
 
             null -> TODO()
