@@ -29,7 +29,9 @@ object DiagnosticsTree {
                                     label = "💡 Path Conditions",
                                     collapsibleState = TreeItemCollapsibleState.Collapsed,
                                     children = diag.pathConditions.map {
-                                        TreeViewNode(it.message)
+                                        TreeViewNode(
+                                            label = it.message,
+                                            command = KnownCommands.GoToStatement.asCommand(it.location))
                                     })
                             )
                         )
