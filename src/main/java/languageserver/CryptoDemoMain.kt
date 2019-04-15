@@ -10,15 +10,20 @@ val ruleDirPath =
     System.getProperty("user.project")?.let { userProject ->
         System.setProperty("log4j.configurationFile", "$userProject/src/test/resources/template-log4j2.xml")
         File("$userProject/JCA_rules").absolutePath
-    } ?: throw IllegalStateException("Please specify your the project path of crypto-lsp-demo as JVM argument:\r\n" + "-Duser.project=<PATH_TO_crypto-lsp-demo>")
+    }
+        ?: throw IllegalStateException("Please specify your the project path of crypto-lsp-demo as JVM argument:\r\n" + "-Duser.project=<PATH_TO_crypto-lsp-demo>")
 
 object CryptoDemoMain {
     @JvmStatic
     fun main(args: Array<String>) {
-        if (args.contains("-socket"))
-            CryptoLanguageServer(ruleDirPath).launchOnSocketPort(5007)
-        else
+        if (args.contains("-socket")) {
+            while (true) {
+                CryptoLanguageServer(ruleDirPath).launchOnSocketPort(5007)
+                System.err.println("\nLanguage server crashed, restarting...\n")
+            }
+        } else {
             CryptoLanguageServer(ruleDirPath).launchOnStdio()
+        }
     }
 }
 
