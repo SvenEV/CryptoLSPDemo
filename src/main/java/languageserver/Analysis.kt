@@ -43,9 +43,13 @@ private fun runSootPacks(t: Transformer) {
 
 private fun SootMethod.tryRetrieveActiveBody() =
     try {
-        retrieveActiveBody()
+        when {
+            activeBody != null -> activeBody
+            source != null && (declaringClass == null || !declaringClass.isPhantomClass) && !isPhantom -> retrieveActiveBody()
+            else -> null
+        }
     } catch (ex: RuntimeException) {
-        null // failed to retrieve body (missing sources?)
+        null // failed to retrieve body
     }
 
 /**
@@ -56,7 +60,8 @@ fun fixLocalVariableNamesInAllClasses() {
     val parser = JavaParser()
 
     Scene.v().classes
-        .flatMap { it.methods }
+        .asSequence()
+        .flatMap { it.methods.asSequence() }
         .mapNotNull { it.tryRetrieveActiveBody() }
         .forEach { methodBody ->
             // Parse method declaration, extract parameter names and attach them to the SootMethod as a tag
