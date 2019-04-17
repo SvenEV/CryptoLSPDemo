@@ -6,10 +6,11 @@ import languageserver.*
 object DiagnosticsTree {
     fun buildTree(diagnostics: Iterable<CogniCryptDiagnostic>) =
         diagnostics
-            .groupBy { it.location.uri }
+            .groupBy { it.location?.uri }
             .map { (uri, diags) ->
                 TreeViewNode(
                     resourceUri = uri,
+                    label = if (uri == null) "<Project>" else null,
                     collapsibleState = TreeItemCollapsibleState.Expanded,
                     children = diags.map { diag ->
                         TreeViewNode(

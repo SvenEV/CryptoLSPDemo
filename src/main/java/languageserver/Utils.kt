@@ -5,6 +5,9 @@ import crypto.pathconditions.ofType
 import de.upb.soot.frontends.java.DebuggingInformationTag
 import de.upb.soot.frontends.java.PositionInfoTag
 import de.upb.soot.frontends.java.PositionTag
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.future.await
+import kotlinx.coroutines.withContext
 import org.apache.commons.io.input.TeeInputStream
 import org.apache.commons.io.output.TeeOutputStream
 import org.eclipse.lsp4j.Location
@@ -12,13 +15,13 @@ import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import soot.SootMethod
 import soot.Unit
-import soot.tagkit.LineNumberTag
 import java.io.*
 import java.net.URI
 import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.concurrent.CompletableFuture
 import kotlin.streams.asSequence
 
 //
@@ -44,16 +47,12 @@ fun Range.contains(pos: Position) =
         pos.character <= end.character
 
 /**
- * Tries to determine the exact or approximate position of a statement in the source file
- * by looking for a [PositionTag], [PositionInfoTag] or a [LineNumberTag].
+ * Tries to determine the exact position of a statement in the source file
+ * by looking for a [PositionTag] or a [PositionInfoTag].
  */
 val Unit.sourceLocation get() =
     tags.ofType<PositionTag>().firstOrNull()?.position?.asLocation
         ?: tags.ofType<PositionInfoTag>().firstOrNull()?.positionInfo?.stmtPosition?.asLocation
-        ?: tags.ofType<LineNumberTag>().firstOrNull()?.let { tag ->
-            val pos = Position(tag.lineNumber - 1, 0)
-            Location(null, Range(pos, pos)) // TODO: specify URI
-        }
 
 /**
  * Tries to determine the exact position of a method in the source file by looking for a [DebuggingInformationTag].
@@ -110,7 +109,6 @@ fun URL.toStringWithWindowsFix() = fixFileUriOnWindows(toString())
 val String.asFilePath: Path get() = Paths.get(URI(fixFileUriOnWindows(this)))
 val URL.asFilePath: Path get() = toString().asFilePath
 
-
 //
 // Stream helpers
 //
@@ -130,3 +128,20 @@ fun OutputStream.logStream(logFileName: String): OutputStream = try {
 } catch (e: IOException) {
     this
 }
+
+fun InputStream.logStream(): InputStream = TeeInputStream(this, System.out)
+fun OutputStream.logStream(): OutputStream = TeeOutputStream(this, System.out)
+
+//
+// Concurrency helpers
+//
+
+class FutureValue<T> : CompletableFuture<T>() {
+    @Deprecated("Use getAsync() instead to prevent cancellation", ReplaceWith("getAsync()"))
+    fun await(): Nothing {
+        throw Exception("Use getAsync() instead to prevent cancellation")
+    }
+}
+
+/** Awaits the result of a future without causing it to be cancelled in case the awaiting job gets cancelled */
+suspend fun <T> CompletableFuture<T>.getAsync(): T = withContext(NonCancellable) { await() }

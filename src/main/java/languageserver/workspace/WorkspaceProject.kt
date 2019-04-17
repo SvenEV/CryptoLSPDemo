@@ -1,17 +1,13 @@
 package languageserver.workspace
 
-import languageserver.CogniCryptDiagnostic
-import languageserver.asFilePath
-import languageserver.contains
+import languageserver.*
 import languageserver.projectsystem.InferConfig
 import languageserver.projectsystem.InferSourcePath
 import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.Position
-import org.eclipse.lsp4j.PublishDiagnosticsParams
 import soot.SootMethod
 import soot.jimple.toolkits.ide.icfg.AbstractJimpleBasedICFG
 import java.nio.file.Path
-import java.util.concurrent.CompletableFuture
 
 data class MethodCodeLens(val method: SootMethod, val codeLens: CodeLens)
 
@@ -51,40 +47,22 @@ data class WorkspaceProject(
     val rootPath: Path,
     val projectPaths: ProjectPaths,
     var analysisResults: AnalysisResults,
-    var analysisResultsAwaiter: CompletableFuture<Unit>) {
+    var analysisResultsAwaiter: FutureValue<AnalysisResults>) {
 
     fun diagnosticsAt(filePath: Path, position: Position) =
         analysisResults.diagnostics.filter {
-            it.location.uri.asFilePath == filePath &&
+            it.location?.uri?.asFilePath == filePath &&
                 it.location.range.contains(position)
         }
 
     fun invalidateDiagnostics() {
         if (analysisResultsAwaiter.isDone)
-            analysisResultsAwaiter = CompletableFuture()
+            analysisResultsAwaiter = FutureValue()
     }
 
     fun updateAnalysisResults(results: AnalysisResults) {
         analysisResults = results
-        analysisResultsAwaiter.complete(Unit)
-    }
-
-    fun clearDiagnosticsForFile(filePath: Path): PublishDiagnosticsParams? {
-        val oldCount = analysisResults.diagnostics.size
-        val remainingDiagnostics = analysisResults.diagnostics.filter { it.location.uri.asFilePath != filePath }
-
-        if (remainingDiagnostics.size < oldCount) {
-            val publishParams = PublishDiagnosticsParams().apply {
-                uri = filePath.toUri().toString()
-                diagnostics = emptyList()
-            }
-            analysisResults = analysisResults.copy(diagnostics = remainingDiagnostics)
-            System.err.println("server:\n$publishParams")
-            return publishParams
-        } else {
-            // No diagnostics were cleared, no need to notify client
-            return null
-        }
+        analysisResultsAwaiter.complete(results)
     }
 
     companion object {
@@ -92,6 +70,6 @@ data class WorkspaceProject(
             rootPath,
             ProjectPaths.scan(rootPath),
             defaultAnalysisResults,
-            CompletableFuture())
+            FutureValue())
     }
 }

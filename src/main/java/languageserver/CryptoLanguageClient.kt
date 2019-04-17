@@ -23,4 +23,7 @@ interface CryptoLanguageClient : LanguageClient {
 
     @JsonNotification("cognicrypt/showTextDocument")
     fun showTextDocument(args: ShowTextDocumentParams)
+
+    @JsonRequest("cognicrypt/connectToJavaExtension")
+    fun connectToJavaExtension(): CompletableFuture<ConnectToJavaExtensionResult>
 }

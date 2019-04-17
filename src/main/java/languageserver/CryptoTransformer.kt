@@ -16,7 +16,10 @@ import soot.jimple.toolkits.ide.icfg.JimpleBasedInterproceduralCFG
 import soot.options.Options
 import java.io.File
 
-class CryptoTransformer(ruleDir: String) : SceneTransformer() {
+class CryptoTransformer(
+    private val applicationClassPath: String?,
+    ruleDir: String) : SceneTransformer() {
+
     private val errorReporter: CryptoErrorReporter
 
     // When whole program mode is disabled, the classpath misses jce.jar
@@ -93,6 +96,8 @@ class CryptoTransformer(ruleDir: String) : SceneTransformer() {
         Options.v().set_keep_line_number(true)
         Options.v().set_prepend_classpath(true)// append rt.jar to soot class path
         Options.v().set_soot_classpath(File.pathSeparator + pathToJCE)
+        if (applicationClassPath != null)
+            Options.v().set_process_dir(applicationClassPath.split(File.pathSeparatorChar))
         Options.v().set_include(includeList)
         Options.v().set_exclude(excludeList)
         Options.v().set_full_resolver(true)

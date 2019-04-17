@@ -18,17 +18,21 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
+import kotlinx.coroutines.*
+import kotlinx.coroutines.future.await
+import kotlinx.coroutines.future.future
+import java.nio.file.Paths
 
 class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, LanguageClientAware {
     override fun shutdown() = CompletableFuture.completedFuture<Any>(null)!!
 
     override fun exit() {}
 
-    override fun connect(client: LanguageClient?) {
+    override fun connect(client: LanguageClient) {
         this.client = client as CryptoLanguageClient
     }
 
-    fun connect(client: CryptoLanguageClient?, socket: Socket) {
+    fun connect(client: CryptoLanguageClient, socket: Socket) {
         connect(client)
         connectionSocket = socket
     }
@@ -37,45 +41,55 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
     lateinit var documentStore: ServerDocumentStore
 
     val logger = Logger()
-    var client: CryptoLanguageClient? = null
+    lateinit var client: CryptoLanguageClient
+    var initParams = FutureValue<InitializeParams>()
     var connectionSocket: Socket? = null
-    var project: WorkspaceProject? = null // represents the single workspace root folder opened in the editor (multi-root workspaces are not yet supported)
+    var project = FutureValue<WorkspaceProject>() // represents the single workspace root folder opened in the editor (multi-root workspaces are not yet supported)
     var configuration = defaultConfiguration
 
-    fun notifyStaleResults(msg: String) {
+    suspend fun notifyStaleResults(msg: String) {
         when (configuration.autoReanalyze) {
             AutoReanalyze.Never -> {
             } // Nothing to do
             AutoReanalyze.Always -> performAnalysis()
             AutoReanalyze.AskEveryTime -> {
-                client?.showMessageRequest(ShowMessageRequestParams().apply {
+                val params = ShowMessageRequestParams().apply {
                     type = MessageType.Info
                     message = "$msg, re-analyze? (You can change this behavior in the settings.)"
                     actions = listOf(MessageActionItem("Re-Analyze"))
-                })?.thenApply { action ->
-                    if (action.title == "Re-Analyze")
-                        performAnalysis()
                 }
+                val action = client.showMessageRequest(params)?.await()
+                if (action?.title == "Re-Analyze")
+                    performAnalysis()
             }
         }
     }
 
     fun notifyMultiWorkspaceNotSupported() {
-        client?.showMessage(MessageParams(MessageType.Warning, "Multiple workspace folders are not supported by the CogniCrypt language server"))
+        client.showMessage(MessageParams(MessageType.Warning, "Multiple workspace folders are not supported by the CogniCrypt language server"))
     }
 
-    fun clearDiagnosticsForFile(filePath: Path) {
-        val publishParams = project!!.clearDiagnosticsForFile(filePath)
-        if (publishParams != null)
-            client?.publishDiagnostics(publishParams)
+    /** Removes all diagnostics for a certain file from the language client. Analysis results remain unchanged. */
+    suspend fun clearDiagnosticsForFile(filePath: Path) {
+        val currentDiags = project.getAsync().analysisResults.diagnostics
+        if (currentDiags.any { it.location?.uri?.asFilePath == filePath }) {
+            val publishParams = PublishDiagnosticsParams().apply {
+                uri = filePath.toUri().toString()
+                diagnostics = emptyList()
+            }
+            client.publishDiagnostics(publishParams)
+        } else {
+            // No diagnostics exist for that file, no need to notify client
+        }
     }
 
-    fun performAnalysis() {
+    suspend fun performAnalysis() {
         fun publishDiagnostics(diagnostics: Collection<CogniCryptDiagnostic>) {
             diagnostics
+                .filter { result -> result.location != null }
                 .map { result ->
                     Diagnostic().apply {
-                        source = result.location.uri
+                        source = result.location!!.uri
                         message = result.message
                         range = result.location.range
                         severity = result.severity
@@ -83,20 +97,19 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
                     }
                 }
                 .groupBy { it.source }
-                .forEach { sourceUri, diags ->
+                .forEach { (sourceUri, diags) ->
                     val publishParams = PublishDiagnosticsParams().apply {
                         this.uri = sourceUri
                         this.diagnostics = diags
                     }
-                    client?.publishDiagnostics(publishParams)
-                    System.err.println("server:\n$publishParams")
+                    client.publishDiagnostics(publishParams)
                 }
 
             val tree = DiagnosticsTree.buildTree(diagnostics)
-            client?.publishTreeData(PublishTreeDataParams("cognicrypt.diagnostics", tree))
+            client.publishTreeData(PublishTreeDataParams("cognicrypt.diagnostics", tree))
         }
 
-        val result = analyze(client, rulesDir, project!!.projectPaths) ?: return
+        val result = analyze(client, rulesDir, project.getAsync(), configuration.codeSource) ?: return
         publishDiagnostics(result.diagnostics)
 
         val methodCodeLenses = soot.Scene.v().classes
@@ -118,21 +131,18 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
             }
             .groupBy({ it.first }) { it.second }
 
-        project?.updateAnalysisResults(AnalysisResults(result.diagnostics, methodCodeLenses, result.icfg!!))
-        client?.setStatusBarMessage(null)
+        project.getAsync().updateAnalysisResults(AnalysisResults(result.diagnostics, methodCodeLenses, result.icfg!!))
+        client.setStatusBarMessage(null)
     }
 
-    override fun getTextDocumentService() = CryptoTextDocumentService(this, { client }, rulesDir)
+    override fun getTextDocumentService() = CryptoTextDocumentService(this)
 
-    override fun getWorkspaceService(): WorkspaceService = CryptoWorkspaceService(this) { client }
+    override fun getWorkspaceService(): WorkspaceService = CryptoWorkspaceService(this)
 
     override fun initialize(params: InitializeParams): CompletableFuture<InitializeResult> {
         logger.logClientMsg(params.toString())
-        System.err.println("client:\n$params")
 
-        client?.setStatusBarMessage(StatusMessage("Initializing project..."))
-
-        project = WorkspaceProject.create(params.rootUri.asFilePath)
+        initParams.complete(params)
         documentStore = ServerDocumentStore()
 
         // Report server capabilities
@@ -149,45 +159,52 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
                 })
             })
 
-        System.err.println("server:\n${result.capabilities}")
         logger.logServerMsg(result.toString())
         return CompletableFuture.completedFuture(result)
     }
 
     override fun initialized(params: InitializedParams?) {
-        super.initialized(params)
+        GlobalScope.future {
+            super.initialized(params)
 
-        client?.publishTreeData(PublishTreeDataParams("cognicrypt.info", listOf(
-            TreeViewNode(
-                label = "📁 Source Path",
-                collapsibleState = TreeItemCollapsibleState.Expanded,
-                children = project!!.projectPaths.sourcePath.map {
-                    TreeViewNode(it.toString())
-                }),
-            TreeViewNode(
-                label = "📁 Library Path",
-                collapsibleState = TreeItemCollapsibleState.Expanded,
-                children = project!!.projectPaths.libraryPath.map {
-                    TreeViewNode(it.toString())
-                }),
-            TreeViewNode(
-                label = "📁 Class Path",
-                collapsibleState = TreeItemCollapsibleState.Expanded,
-                children = project!!.projectPaths.classPath.map {
-                    TreeViewNode(it.toString())
-                })
-        )))
+            // Load configuration
+            client.setStatusBarMessage(StatusMessage("Loading configuration..."))
+            configuration = requestConfiguration(client, initParams.getAsync().rootUri).await()
 
-        client?.setStatusBarMessage(StatusMessage("Loading configuration..."))
+            client.setStatusBarMessage(StatusMessage("Initializing project..."))
 
-        // Load configuration
-        requestConfiguration(client!!, project!!.rootPath.toUri().toString()).thenApply {
-            configuration = it
+            val proj = when (configuration.codeSource) {
+                CodeSource.Source -> {
+                    WorkspaceProject.create(initParams.getAsync().rootUri.asFilePath)
+                }
+                CodeSource.Compiled -> {
+                    val result = client.connectToJavaExtension().await()
+                    WorkspaceProject.create(Paths.get(result.jdtWorkspacePath))
+                }
+            }
 
-            client?.registerCapability(RegistrationParams(listOf(
-                Registration()
+            client.publishTreeData(PublishTreeDataParams("cognicrypt.info", listOf(
+                TreeViewNode(
+                    label = "📁 Source Path",
+                    collapsibleState = TreeItemCollapsibleState.Expanded,
+                    children = proj.projectPaths.sourcePath.map {
+                        TreeViewNode(it.toString())
+                    }),
+                TreeViewNode(
+                    label = "📁 Library Path",
+                    collapsibleState = TreeItemCollapsibleState.Expanded,
+                    children = proj.projectPaths.libraryPath.map {
+                        TreeViewNode(it.toString())
+                    }),
+                TreeViewNode(
+                    label = "📁 Class Path",
+                    collapsibleState = TreeItemCollapsibleState.Expanded,
+                    children = proj.projectPaths.classPath.map {
+                        TreeViewNode(it.toString())
+                    })
             )))
 
+            project.complete(proj)
             performAnalysis()
         }
     }
@@ -227,8 +244,9 @@ fun CryptoLanguageServer.launchOnSocketPort(port: Int) {
         ServerSocket(port).use { serverSocket ->
             serverSocket.accept().use { connectionSocket ->
                 val launcher = createServerLauncher(this,
-                    connectionSocket.getInputStream().logStream("magpie.in"),
-                    connectionSocket.getOutputStream().logStream("magpie.out")).create()
+                    connectionSocket.getInputStream().logStream(),//"magpie.in"),
+                    connectionSocket.getOutputStream().logStream()//"magpie.out")
+                ).create()
                 connect(launcher.remoteProxy, connectionSocket)
                 launcher.startListening().get()
             }

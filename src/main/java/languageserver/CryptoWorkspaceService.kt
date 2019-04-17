@@ -5,27 +5,33 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import crypto.pathconditions.debug.prettyPrint
 import crypto.pathconditions.graphviz.toDotString
-import javafx.scene.Scene
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.future.future
+import kotlinx.coroutines.launch
 import languageserver.workspace.DiagnosticsTree
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.WorkspaceService
+import soot.Scene
 import java.util.concurrent.CompletableFuture
 
-class CryptoWorkspaceService(
-    private val server: CryptoLanguageServer,
-    private val client: () -> CryptoLanguageClient?) : WorkspaceService {
+class CryptoWorkspaceService(private val server: CryptoLanguageServer) : WorkspaceService {
+    private val client get() = server.client
 
     override fun didChangeWatchedFiles(args: DidChangeWatchedFilesParams) {
-        server.project?.invalidateDiagnostics()
-        args.changes.forEach {
-            when (it.type!!) {
-                FileChangeType.Created -> {}
-                FileChangeType.Changed -> server.clearDiagnosticsForFile(it.uri.asFilePath)
-                FileChangeType.Deleted -> server.clearDiagnosticsForFile(it.uri.asFilePath)
+        GlobalScope.launch {
+            args.changes.forEach {
+                when (it.type!!) {
+                    FileChangeType.Created -> {
+                    }
+                    FileChangeType.Changed -> server.clearDiagnosticsForFile(it.uri.asFilePath)
+                    FileChangeType.Deleted -> server.clearDiagnosticsForFile(it.uri.asFilePath)
+                }
             }
+            server.project.getAsync().invalidateDiagnostics()
+            server.notifyStaleResults("Files changed")
         }
-        server.notifyStaleResults("Files changed")
     }
+
 
     override fun didChangeConfiguration(args: DidChangeConfigurationParams) {
         server.configuration = configurationFromJson((args.settings as JsonObject)["cognicrypt"].asJsonObject)
@@ -35,16 +41,16 @@ class CryptoWorkspaceService(
         server.notifyMultiWorkspaceNotSupported()
     }
 
-    override fun executeCommand(params: ExecuteCommandParams): CompletableFuture<Any> {
+    override fun executeCommand(params: ExecuteCommandParams): CompletableFuture<Any> = GlobalScope.future {
         when (KnownCommands.tryParse(params.command)) {
             KnownCommands.Reanalyze -> {
-                server.project?.invalidateDiagnostics()
+                server.project.getAsync().invalidateDiagnostics()
                 server.performAnalysis()
             }
 
             KnownCommands.ShowCfg -> {
                 val methodSignature = (params.arguments.firstOrNull() as? JsonPrimitive)?.asString
-                val analysisResults = server.project!!.analysisResults
+                val analysisResults = server.project.getAsync().analysisResults
                 val method = analysisResults.methodCodeLenses
                     .flatMap { it.value }
                     .firstOrNull { it.method.signature == methodSignature }
@@ -52,31 +58,32 @@ class CryptoWorkspaceService(
 
                 if (method != null && analysisResults.icfg != null) {
                     val dotString = analysisResults.icfg.toDotString(method)
-                    client()?.showCfg(ShowCfgParams(dotString))
+                    client.showCfg(ShowCfgParams(dotString))
                 } else {
-                    client()?.showMessage(MessageParams(MessageType.Error, "Didn't find method"))
+                    client.showMessage(MessageParams(MessageType.Error, "Didn't find method"))
                 }
             }
 
             KnownCommands.FilterDiagnostics -> {
+                val diagnostics = server.project.getAsync().analysisResults.diagnostics
                 val ids = (params.arguments.firstOrNull() as? JsonArray)?.map { it.asNumber.toInt() } ?: emptyList()
                 val tree =
                     if (ids.any()) {
-                        val diagnosticsFiltered = server.project!!.analysisResults.diagnostics.filter { it.id in ids }
+                        val diagnosticsFiltered = diagnostics.filter { it.id in ids }
                         val filterHeader = TreeViewNode("❌ Clear Filter", command = KnownCommands.FilterDiagnostics.asCommand())
                         listOf(filterHeader) + DiagnosticsTree.buildTree(diagnosticsFiltered)
                     } else {
-                        DiagnosticsTree.buildTree(server.project!!.analysisResults.diagnostics)
+                        DiagnosticsTree.buildTree(diagnostics)
                     }
-                client()?.publishTreeData(PublishTreeDataParams("cognicrypt.diagnostics", tree, focus = true))
+                client.publishTreeData(PublishTreeDataParams("cognicrypt.diagnostics", tree, focus = true))
             }
 
             KnownCommands.InspectJimple -> {
-                val availableClasses = soot.Scene.v().classes.map { it.name }
-                client()?.quickPick(QuickPickParams(availableClasses, "Show Jimple code of class..."))?.thenAccept { result ->
-                    val selectedClass = soot.Scene.v().getSootClass(result.selectedItem)
+                val availableClasses = Scene.v().classes.map { it.name }
+                client.quickPick(QuickPickParams(availableClasses, "Show Jimple code of class...")).thenAccept { result ->
+                    val selectedClass = Scene.v().getSootClass(result.selectedItem)
                     if (selectedClass != null) {
-                        client()?.showTextDocument(ShowTextDocumentParams(
+                        client.showTextDocument(ShowTextDocumentParams(
                             content = selectedClass.prettyPrint(),
                             language = "java"
                         ))
@@ -84,8 +91,11 @@ class CryptoWorkspaceService(
                 }
             }
 
+            KnownCommands.GoToStatement -> {
+            } // handled client-side
             null -> TODO()
         }
-        return CompletableFuture.completedFuture(null)
+
+        0 // we must return something
     }
 }

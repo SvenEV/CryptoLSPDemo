@@ -54,3 +54,9 @@ data class ShowTextDocumentParams(
     val language: String,
     val selection: Range? = null
 )
+
+// "cognicrypt/connectToJavaExtension"
+
+data class ConnectToJavaExtensionResult(
+    val jdtWorkspacePath: String
+)

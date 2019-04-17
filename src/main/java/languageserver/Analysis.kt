@@ -7,15 +7,29 @@ import crypto.pathconditions.MethodParameterInfo
 import de.upb.soot.frontends.java.JimpleConverter
 import de.upb.soot.frontends.java.WalaClassLoader
 import languageserver.workspace.ProjectPaths
+import languageserver.workspace.WorkspaceProject
 import org.apache.commons.lang3.exception.ExceptionUtils
 import soot.*
 import soot.jimple.AssignStmt
+import soot.options.Options
+import java.io.File
 
-fun analyze(client: CryptoLanguageClient?, rulesDir: String, projectPaths: ProjectPaths): CryptoTransformer? =
+fun analyze(client: CryptoLanguageClient?, rulesDir: String, project: WorkspaceProject, codeSource: CodeSource): CryptoTransformer? =
     try {
-        val transformer = CryptoTransformer(rulesDir)
-        client?.setStatusBarMessage(StatusMessage("Processing sources..."))
-        loadSourceCode(projectPaths)
+        client?.setStatusBarMessage(StatusMessage("Preparing analysis..."))
+
+        val transformer = when (codeSource) {
+            CodeSource.Compiled -> {
+                CryptoTransformer(project.rootPath.toString(), rulesDir)
+            }
+            CodeSource.Source -> {
+                val trafo = CryptoTransformer(null, rulesDir)
+                client?.setStatusBarMessage(StatusMessage("Processing sources..."))
+                loadSourceCode(project.projectPaths)
+                trafo
+            }
+        }
+
         client?.setStatusBarMessage(StatusMessage("CogniCrypt analysis..."))
         runSootPacks(transformer)
         transformer

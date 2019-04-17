@@ -17,7 +17,7 @@ data class CogniCryptDiagnostic(
     val summary: String,
     val message: String,
     val severity: DiagnosticSeverity,
-    val location: Location,
+    val location: Location?,
     val pathConditions: List<DiagnosticRelatedInformation>,
     val dataFlowPath: List<DataFlowPathItem>)
 
@@ -71,7 +71,7 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                             error.javaClass.simpleName,
                             message,
                             DiagnosticSeverity.Error,
-                            stmt.sourceLocation!!,
+                            stmt.sourceLocation,
                             pathConditions,
                             dataFlowPath)
                     }
