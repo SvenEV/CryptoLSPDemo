@@ -46,6 +46,10 @@ fun Range.contains(pos: Position) =
         pos.character >= start.character &&
         pos.character <= end.character
 
+val Range.isValid get() =
+    start.line >= 0 && start.character >= 0 &&
+        end.line >= start.line && end.character >= 0
+
 /**
  * Tries to determine the exact position of a statement in the source file
  * by looking for a [PositionTag] or a [PositionInfoTag].
@@ -66,7 +70,7 @@ val SootMethod.sourceLocation get() = tags
  * @param asSingleLine If true, ranges spanning multiple lines are merged into a single line
  */
 fun readRangeFromFile(location: Location?, asSingleLine: Boolean = false): String? {
-    if (location?.uri == null || location.range.end.line < location.range.start.line)
+    if (location?.uri == null || !location.range.isValid)
         return null
 
     val numLines = location.range.end.line - location.range.start.line + 1
