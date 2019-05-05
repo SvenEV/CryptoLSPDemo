@@ -58,10 +58,15 @@ class CryptoWorkspaceService(private val server: CryptoLanguageServer) : Workspa
 
                 if (method != null && analysisResults.icfg != null) {
                     val dotString = analysisResults.icfg.toDotString(method)
-                    client.showCfg(ShowCfgParams(dotString))
+                    client.showTextDocument(ShowTextDocumentParams(dotString, "dot"))
                 } else {
                     client.showMessage(MessageParams(MessageType.Error, "Didn't find method"))
                 }
+            }
+
+            KnownCommands.VisualizeFlowAnalysis -> {
+                val dotString = (params.arguments[0] as JsonObject)["data"].asString
+                client.showTextDocument(ShowTextDocumentParams(dotString, "dot"))
             }
 
             KnownCommands.FilterDiagnostics -> {

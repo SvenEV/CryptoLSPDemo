@@ -57,11 +57,7 @@ private fun runSootPacks(t: Transformer) {
 
 private fun SootMethod.tryRetrieveActiveBody() =
     try {
-        when {
-            activeBody != null -> activeBody
-            source != null && (declaringClass == null || !declaringClass.isPhantomClass) && !isPhantom -> retrieveActiveBody()
-            else -> null
-        }
+        retrieveActiveBody()
     } catch (ex: RuntimeException) {
         null // failed to retrieve body
     }

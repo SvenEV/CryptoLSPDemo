@@ -65,8 +65,6 @@ class CryptoTransformer(
         val scanner = object : CryptoScanner() {
             override fun icfg() = observableIcfg
             override fun getAnalysisListener() = reporter
-            override fun isCommandLineMode() = true
-            override fun rulesInSrcFormat() = false
         }
 
         scanner.scan(rules)

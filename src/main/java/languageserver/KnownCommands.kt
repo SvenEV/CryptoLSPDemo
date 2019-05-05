@@ -7,7 +7,8 @@ enum class CommandHandlerSite { Client, Server }
 enum class KnownCommands(val id: String, val title: String, val commandHandlerSite: CommandHandlerSite) {
     // Handled by language server:
     Reanalyze("cognicrypt.reanalyze", "Re-Analyze", CommandHandlerSite.Server),
-    ShowCfg("cognicrypt.showcfg", "Show CFG", CommandHandlerSite.Server),
+    ShowCfg("cognicrypt.showCfg", "Show CFG", CommandHandlerSite.Server),
+    VisualizeFlowAnalysis("cognicrypt.visualizeFlowAnalysis", "Visualize Flow Analysis", CommandHandlerSite.Server),
     FilterDiagnostics("cognicrypt.filterDiagnostics", "Filter Diagnostics", CommandHandlerSite.Server),
     InspectJimple("cognicrypt.inspectJimple", "Inspect Jimple", CommandHandlerSite.Server),
 

@@ -3,14 +3,18 @@ package languageserver
 import boomerang.jimple.Statement
 import crypto.analysis.errors.ErrorWithObjectAllocation
 import crypto.pathconditions.expressions.ContextFormat
-import crypto.pathconditions.ofType
 import crypto.reporting.PathConditionsErrorMarkerListener
 import org.eclipse.lsp4j.DiagnosticRelatedInformation
 import org.eclipse.lsp4j.DiagnosticSeverity
 import org.eclipse.lsp4j.Location
-import soot.jimple.IfStmt
 
 data class DataFlowPathItem(val location: Location, val statement: Statement)
+
+data class PathConditionItem(
+    val conditionAsString: String,
+    val branchLocations: Set<Location>,
+    val flowAnalysisVisualization: String
+)
 
 data class CogniCryptDiagnostic(
     val id: Int,
@@ -18,7 +22,7 @@ data class CogniCryptDiagnostic(
     val message: String,
     val severity: DiagnosticSeverity,
     val location: Location?,
-    val pathConditions: List<DiagnosticRelatedInformation>,
+    val pathConditions: List<PathConditionItem>,
     val dataFlowPath: List<DataFlowPathItem>)
 
 class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
@@ -32,25 +36,22 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                     methodMap.value.map { error ->
                         val stmt = error.errorLocation.unit.get()
 
+                        val summary = "${error.javaClass.simpleName}: ${error.toErrorMarkerString()}"
+
                         val message = String.format("%s violating CrySL rule for %s:\n%s",
                             error.javaClass.simpleName,
                             error.rule.className,
                             error.toErrorMarkerString())
 
-                        val relatedErrors = methodMap.value
-                            .filter { it.errorLocation.unit.get() == stmt }
-                            .ofType<ErrorWithObjectAllocation>()
-
                         val pathConditions = when (error) {
-                            is ErrorWithObjectAllocation -> error.getPathConditions(relatedErrors)
-                                .flatMap {
-                                    // TODO: This is not ideal: If a single path condition covers multiple ifs, we report it for every covered if
-                                    it.branchStatements.map { ifStmt ->
-                                        DiagnosticRelatedInformation(
-                                            ifStmt.unit.get().sourceLocation,
-                                            it.condition.prettyPrint(ContextFormat.ContextFree)
-                                        )
-                                    }
+                            is ErrorWithObjectAllocation -> error.computePathConditions()
+                                .map {
+                                    PathConditionItem(
+                                        it.condition.prettyPrint(ContextFormat.ContextFree),
+                                        it.branchStatements
+                                            .mapNotNull { ifStmt -> ifStmt.unit.get().sourceLocation }
+                                            .toSet(),
+                                        it.asDirectedGraph().toDotString())
                                 }
                             else -> emptyList()
                         }
@@ -68,7 +69,7 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
 
                         CogniCryptDiagnostic(
                             id++,
-                            error.javaClass.simpleName,
+                            summary,
                             message,
                             DiagnosticSeverity.Error,
                             stmt.sourceLocation,

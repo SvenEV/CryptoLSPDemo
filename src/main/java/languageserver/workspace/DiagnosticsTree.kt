@@ -14,25 +14,34 @@ object DiagnosticsTree {
                     collapsibleState = TreeItemCollapsibleState.Expanded,
                     children = diags.map { diag ->
                         TreeViewNode(
+                            id = diag.id.toString(),
                             label = "🔸 ${diag.summary}",
                             tooltip = diag.message,
                             collapsibleState = TreeItemCollapsibleState.Collapsed,
                             children = listOf(
                                 TreeViewNode(
+                                    id = "${diag.id}/dataFlowPath",
                                     label = "🏁 Data Flow Path",
+                                    command = KnownCommands.GoToStatement.asCommand(diag.dataFlowPath.map { it.location }),
                                     collapsibleState = TreeItemCollapsibleState.Collapsed,
-                                    children = diag.dataFlowPath.map {
+                                    children = diag.dataFlowPath.mapIndexed { i, entry ->
                                         TreeViewNode(
-                                            label = "◼ ${readRangeFromFile(it.location, true) ?: it.statement.prettyPrintRefined()}",
-                                            command = KnownCommands.GoToStatement.asCommand(it.location))
+                                            id = "${diag.id}/dataFlowPath/$i",
+                                            label = "◼ ${readRangeFromFile(entry.location, true)
+                                                ?: entry.statement.prettyPrintRefined()}",
+                                            command = KnownCommands.GoToStatement.asCommand(listOf(entry.location)))
                                     }),
                                 TreeViewNode(
+                                    id = "${diag.id}/pathConditions",
                                     label = "💡 Path Conditions",
                                     collapsibleState = TreeItemCollapsibleState.Collapsed,
-                                    children = diag.pathConditions.map {
+                                    children = diag.pathConditions.mapIndexed { i, entry ->
                                         TreeViewNode(
-                                            label = it.message,
-                                            command = KnownCommands.GoToStatement.asCommand(it.location))
+                                            id = "${diag.id}/pathConditions/$i",
+                                            label = entry.conditionAsString,
+                                            command = KnownCommands.GoToStatement.asCommand(entry.branchLocations),
+                                            data = entry.flowAnalysisVisualization,
+                                            contextValue = "pathCondition")
                                     })
                             )
                         )

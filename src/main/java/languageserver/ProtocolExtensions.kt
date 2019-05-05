@@ -3,10 +3,6 @@ package languageserver
 import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.Range
 
-// "cognicrypt/showCFG"
-
-data class ShowCfgParams(val dotString: String)
-
 // "cognicrypt/status"
 
 data class StatusMessage(
@@ -29,7 +25,9 @@ data class TreeViewNode(
     val tooltip: String? = null,
     val id: String? = null,
     val collapsibleState: TreeItemCollapsibleState = TreeItemCollapsibleState.None,
-    val command: Command? = null
+    val command: Command? = null,
+    val contextValue: String? = null,
+    val data: Any? = null // custom field, not part of the specification
 )
 
 enum class TreeItemCollapsibleState {

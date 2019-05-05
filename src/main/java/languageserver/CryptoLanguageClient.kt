@@ -9,9 +9,6 @@ import java.util.concurrent.CompletableFuture
  * Extends the [LanguageClient] interface with CogniCrypt-specific protocol extensions.
  */
 interface CryptoLanguageClient : LanguageClient {
-    @JsonNotification("cognicrypt/showCFG")
-    fun showCfg(args: ShowCfgParams)
-
     @JsonNotification("cognicrypt/status")
     fun setStatusBarMessage(args: StatusMessage?)
 
