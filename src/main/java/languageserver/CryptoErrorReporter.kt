@@ -17,9 +17,11 @@ data class PathConditionItem(
 )
 
 data class CogniCryptDiagnostic(
-    val id: Int,
+    val id: String,
     val summary: String,
     val message: String,
+    val methodName: String,
+    val className: String,
     val severity: DiagnosticSeverity,
     val location: Location?,
     val pathConditions: List<PathConditionItem>,
@@ -29,7 +31,6 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
     lateinit var diagnostics: Collection<CogniCryptDiagnostic>
 
     override fun afterAnalysis() {
-        var id = 0
         diagnostics = this.errorMarkers.rowMap()
             .flatMap { klassMap ->
                 klassMap.value.flatMap { methodMap ->
@@ -67,10 +68,15 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                             else -> emptyList()
                         }
 
+                        // This should be (1) unique among all diagnostics, and (2) persistent across analysis runs
+                        val id = message + error.errorLocation.unit.get().sourceLocation?.toString()
+
                         CogniCryptDiagnostic(
-                            id++,
+                            id,
                             summary,
                             message,
+                            error.errorLocation.method.name,
+                            error.errorLocation.method.declaringClass.name,
                             DiagnosticSeverity.Error,
                             stmt.sourceLocation,
                             pathConditions,
