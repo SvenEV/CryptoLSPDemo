@@ -4,15 +4,13 @@ import com.github.javaparser.JavaParser
 import com.github.javaparser.ast.body.MethodDeclaration
 import com.github.javaparser.ast.expr.AssignExpr
 import crypto.pathconditions.MethodParameterInfo
-import de.upb.soot.frontends.java.JimpleConverter
 import de.upb.soot.frontends.java.WalaClassLoader
 import languageserver.workspace.ProjectPaths
 import languageserver.workspace.WorkspaceProject
+import magpiebridge.converter.JimpleConverter
 import org.apache.commons.lang3.exception.ExceptionUtils
 import soot.*
 import soot.jimple.AssignStmt
-import soot.options.Options
-import java.io.File
 
 fun analyze(client: CryptoLanguageClient?, rulesDir: String, project: WorkspaceProject, codeSource: CodeSource): CryptoTransformer? =
     try {

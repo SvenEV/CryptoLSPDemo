@@ -2,12 +2,12 @@ package languageserver
 
 import com.ibm.wala.cast.tree.CAstSourcePositionMap
 import crypto.pathconditions.ofType
-import de.upb.soot.frontends.java.DebuggingInformationTag
-import de.upb.soot.frontends.java.PositionInfoTag
-import de.upb.soot.frontends.java.PositionTag
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
+import magpiebridge.converter.DebuggingInformationTag
+import magpiebridge.converter.PositionInfoTag
+import magpiebridge.converter.PositionTag
 import org.apache.commons.io.input.TeeInputStream
 import org.apache.commons.io.output.TeeOutputStream
 import org.eclipse.lsp4j.Location
