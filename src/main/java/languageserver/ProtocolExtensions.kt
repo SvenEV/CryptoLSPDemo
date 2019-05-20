@@ -24,6 +24,7 @@ data class TreeViewNode(
     val children: List<TreeViewNode> = emptyList(),
     val tooltip: String? = null,
     val id: String? = null,
+    val iconPath: String? = null,
     val collapsibleState: TreeItemCollapsibleState = TreeItemCollapsibleState.None,
     val command: Command? = null,
     val contextValue: String? = null,
