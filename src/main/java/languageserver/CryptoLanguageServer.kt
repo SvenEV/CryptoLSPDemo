@@ -93,8 +93,11 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
                         message = result.message
                         range = result.location.range
                         severity = result.severity
-                        relatedInformation = result.pathConditions.map {
-                            DiagnosticRelatedInformation(result.location, it.conditionAsString)
+                        relatedInformation = when (result.pathConditions) {
+                            is PathConditionsError -> emptyList()
+                            is PathConditionsSuccess -> result.pathConditions.items.map {
+                                DiagnosticRelatedInformation(result.location, it.conditionAsString)
+                            }
                         }
                     }
                 }

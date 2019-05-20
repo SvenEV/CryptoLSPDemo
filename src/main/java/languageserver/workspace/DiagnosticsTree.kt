@@ -2,6 +2,7 @@ package languageserver.workspace
 
 import crypto.pathconditions.debug.prettyPrintRefined
 import languageserver.*
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.eclipse.lsp4j.DiagnosticSeverity
 
 object DiagnosticsTree {
@@ -10,10 +11,13 @@ object DiagnosticsTree {
         diags.sortedBy { it.id }.map { diag ->
             // Diagnostic node
             val diagId = "$methodId/${diag.id}"
-            val icon = when (diag.severity) {
-                DiagnosticSeverity.Error -> "StatusCriticalError_16x.svg"
-                DiagnosticSeverity.Warning -> "StatusWarning_16x.svg"
-                else -> "StatusInformation_16x.svg"
+            val icon = when (diag.pathConditions) {
+                is PathConditionsError -> "StatusInvalid_16x.svg"
+                is PathConditionsSuccess -> when (diag.severity) {
+                    DiagnosticSeverity.Error -> "StatusCriticalError_16x.svg"
+                    DiagnosticSeverity.Warning -> "StatusWarning_16x.svg"
+                    else -> "StatusInformation_16x.svg"
+                }
             }
             TreeViewNode(
                 id = diagId,
@@ -40,14 +44,23 @@ object DiagnosticsTree {
                         label = "Path Conditions",
                         iconPath = "~/resources/icons/Lightbulb_16x.svg",
                         collapsibleState = TreeItemCollapsibleState.Collapsed,
-                        children = diag.pathConditions.mapIndexed { i, entry ->
-                            TreeViewNode(
-                                id = "$diagId/pathConditions/$i",
-                                label = entry.conditionAsString,
-                                iconPath = "~/resources/icons/Bullet_16x.svg",
-                                command = KnownCommands.GoToStatement.asCommand(entry.branchLocations),
-                                data = entry.flowAnalysisVisualization,
-                                contextValue = "pathCondition")
+                        children = when (diag.pathConditions) {
+                            is PathConditionsSuccess -> diag.pathConditions.items.mapIndexed { i, entry ->
+                                TreeViewNode(
+                                    id = "$diagId/pathConditions/$i",
+                                    label = entry.conditionAsString,
+                                    iconPath = "~/resources/icons/Bullet_16x.svg",
+                                    command = KnownCommands.GoToStatement.asCommand(entry.branchLocations),
+                                    data = entry.flowAnalysisVisualization,
+                                    contextValue = "pathCondition")
+                            }
+                            is PathConditionsError -> listOf(
+                                TreeViewNode(
+                                    id = "$diagId/pathConditions/error",
+                                    label = "Path Conditions Analysis failed, click for details",
+                                    iconPath = "~/resources/icons/ProcessError_16x.svg",
+                                    command = KnownCommands.ShowTextDocument.asCommand(ShowTextDocumentParams(ExceptionUtils.getStackTrace(diag.pathConditions.exception), "plaintext")))
+                            )
                         })
                 )
             )

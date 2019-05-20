@@ -17,6 +17,10 @@ data class PathConditionItem(
     val flowAnalysisVisualization: String
 )
 
+sealed class PathConditionsInfo
+data class PathConditionsSuccess(val items: List<PathConditionItem>) : PathConditionsInfo()
+data class PathConditionsError(val exception: Exception) : PathConditionsInfo()
+
 data class CogniCryptDiagnostic(
     val id: String,
     val summary: String,
@@ -25,7 +29,7 @@ data class CogniCryptDiagnostic(
     val className: String,
     val severity: DiagnosticSeverity,
     val location: Location?,
-    val pathConditions: List<PathConditionItem>,
+    val pathConditions: PathConditionsInfo,
     val dataFlowPath: List<DataFlowPathItem>)
 
 class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
@@ -45,26 +49,33 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                             error.rule.className,
                             error.toErrorMarkerString())
 
-                        val computedPathConditions = when (error) {
-                            is ErrorWithObjectAllocation -> error.computePathConditions()
-                            else -> emptySet()
-                        }
+                        val (pathConditions, severity) =
+                            try {
+                                val computedPathConditions = when (error) {
+                                    is ErrorWithObjectAllocation -> error.computePathConditions()
+                                    else -> emptySet()
+                                }
 
-                        val severity = when {
-                            computedPathConditions.isEmpty() -> DiagnosticSeverity.Error
-                            computedPathConditions.all { it.condition == JFalse } -> DiagnosticSeverity.Information
-                            computedPathConditions.all { it.condition == JTrue } -> DiagnosticSeverity.Error
-                            else -> DiagnosticSeverity.Warning
-                        }
+                                val severity = when {
+                                    computedPathConditions.isEmpty() -> DiagnosticSeverity.Error
+                                    computedPathConditions.all { it.condition == JFalse } -> DiagnosticSeverity.Information
+                                    computedPathConditions.all { it.condition == JTrue } -> DiagnosticSeverity.Error
+                                    else -> DiagnosticSeverity.Warning
+                                }
 
-                        val pathConditions = computedPathConditions
-                            .map {
-                                PathConditionItem(
-                                    it.condition.prettyPrint(ContextFormat.ContextFree),
-                                    it.branchStatements
-                                        .mapNotNull { ifStmt -> ifStmt.unit.get().sourceLocation }
-                                        .toSet(),
-                                    it.asDirectedGraph().toDotString())
+                                val pathConditions = computedPathConditions
+                                    .map {
+                                        PathConditionItem(
+                                            it.condition.prettyPrint(ContextFormat.ContextFree),
+                                            it.branchStatements
+                                                .mapNotNull { ifStmt -> ifStmt.unit.get().sourceLocation }
+                                                .toSet(),
+                                            it.asDirectedGraph().toDotString())
+                                    }
+
+                                PathConditionsSuccess(pathConditions) to severity
+                            } catch (ex: Exception) {
+                                PathConditionsError(ex) to DiagnosticSeverity.Error
                             }
 
                         val dataFlowPath = when (error) {

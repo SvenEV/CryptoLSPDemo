@@ -40,7 +40,7 @@ class CryptoTextDocumentService(private val server: CryptoLanguageServer) : Text
                 null
         }?.asSequence() ?: emptySequence()
 
-        val ifStatements = surroundingDiagnostic?.pathConditions?.flatMap { cond ->
+        val ifStatements = (surroundingDiagnostic?.pathConditions as? PathConditionsSuccess)?.items?.flatMap { cond ->
             cond.branchLocations
                 .filter { it.uri.asFilePath == position.textDocument.uri.asFilePath }
                 .map { DocumentHighlight(it.range, DocumentHighlightKind.Text) }

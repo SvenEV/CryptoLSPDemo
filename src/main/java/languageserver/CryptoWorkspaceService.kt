@@ -1,5 +1,6 @@
 package languageserver
 
+import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
@@ -93,6 +94,11 @@ class CryptoWorkspaceService(private val server: CryptoLanguageServer) : Workspa
                         ))
                     }
                 }
+            }
+
+            KnownCommands.ShowTextDocument -> {
+                val args = Gson().fromJson(params.arguments[0] as? JsonObject, ShowTextDocumentParams::class.java)
+                client.showTextDocument(args)
             }
 
             KnownCommands.GoToStatement -> {

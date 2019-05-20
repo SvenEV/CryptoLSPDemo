@@ -11,6 +11,7 @@ enum class KnownCommands(val id: String, val title: String, val commandHandlerSi
     VisualizeFlowAnalysis("cognicrypt.visualizeFlowAnalysis", "Visualize Flow Analysis", CommandHandlerSite.Server),
     FilterDiagnostics("cognicrypt.filterDiagnostics", "Filter Diagnostics", CommandHandlerSite.Server),
     InspectJimple("cognicrypt.inspectJimple", "Inspect Jimple", CommandHandlerSite.Server),
+    ShowTextDocument("cognicrypt.showTextDocument", "Show Text Document", CommandHandlerSite.Server),
 
     // Handled by language client:
     GoToStatement("cognicrypt.goto", "Go To Statement", CommandHandlerSite.Client);
