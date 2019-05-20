@@ -3,8 +3,9 @@ package languageserver
 import boomerang.jimple.Statement
 import crypto.analysis.errors.ErrorWithObjectAllocation
 import crypto.pathconditions.expressions.ContextFormat
+import crypto.pathconditions.expressions.JFalse
+import crypto.pathconditions.expressions.JTrue
 import crypto.reporting.PathConditionsErrorMarkerListener
-import org.eclipse.lsp4j.DiagnosticRelatedInformation
 import org.eclipse.lsp4j.DiagnosticSeverity
 import org.eclipse.lsp4j.Location
 
@@ -44,18 +45,27 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                             error.rule.className,
                             error.toErrorMarkerString())
 
-                        val pathConditions = when (error) {
+                        val computedPathConditions = when (error) {
                             is ErrorWithObjectAllocation -> error.computePathConditions()
-                                .map {
-                                    PathConditionItem(
-                                        it.condition.prettyPrint(ContextFormat.ContextFree),
-                                        it.branchStatements
-                                            .mapNotNull { ifStmt -> ifStmt.unit.get().sourceLocation }
-                                            .toSet(),
-                                        it.asDirectedGraph().toDotString())
-                                }
-                            else -> emptyList()
+                            else -> emptySet()
                         }
+
+                        val severity = when {
+                            computedPathConditions.isEmpty() -> DiagnosticSeverity.Error
+                            computedPathConditions.all { it.condition == JFalse } -> DiagnosticSeverity.Information
+                            computedPathConditions.all { it.condition == JTrue } -> DiagnosticSeverity.Error
+                            else -> DiagnosticSeverity.Warning
+                        }
+
+                        val pathConditions = computedPathConditions
+                            .map {
+                                PathConditionItem(
+                                    it.condition.prettyPrint(ContextFormat.ContextFree),
+                                    it.branchStatements
+                                        .mapNotNull { ifStmt -> ifStmt.unit.get().sourceLocation }
+                                        .toSet(),
+                                    it.asDirectedGraph().toDotString())
+                            }
 
                         val dataFlowPath = when (error) {
                             is ErrorWithObjectAllocation -> error.dataFlowPath
@@ -77,7 +87,7 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                             message,
                             error.errorLocation.method.name,
                             error.errorLocation.method.declaringClass.name,
-                            DiagnosticSeverity.Error,
+                            severity,
                             stmt.sourceLocation,
                             pathConditions,
                             dataFlowPath)

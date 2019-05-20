@@ -75,8 +75,7 @@ class CryptoWorkspaceService(private val server: CryptoLanguageServer) : Workspa
                 val tree =
                     if (ids.any()) {
                         val diagnosticsFiltered = diagnostics.filter { it.id in ids }
-                        val filterHeader = TreeViewNode("❌ Clear Filter", command = KnownCommands.FilterDiagnostics.asCommand())
-                        listOf(filterHeader) + DiagnosticsTree.buildTree(diagnosticsFiltered)
+                        DiagnosticsTree.buildFilteredTree(diagnosticsFiltered)
                     } else {
                         DiagnosticsTree.buildTree(diagnostics)
                     }
