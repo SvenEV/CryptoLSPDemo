@@ -19,50 +19,58 @@ object DiagnosticsTree {
                     else -> "StatusInformation_16x.svg"
                 }
             }
+            val canExpand = diag.dataFlowPath.any() || diag.pathConditions is PathConditionsError ||
+                (diag.pathConditions is PathConditionsSuccess && diag.pathConditions.items.any())
+
             TreeViewNode(
                 id = diagId,
                 label = diag.summary,
                 iconPath = "~/resources/icons/$icon",
                 tooltip = diag.message,
-                collapsibleState = TreeItemCollapsibleState.Collapsed,
-                children = listOf(
-                    TreeViewNode(
-                        id = "$diagId/dataFlowPath",
-                        label = "Data Flow Path",
-                        iconPath = "~/resources/icons/ListMembers_16x.svg",
-                        command = KnownCommands.GoToStatement.asCommand(diag.dataFlowPath.map { it.location }),
-                        collapsibleState = TreeItemCollapsibleState.Collapsed,
-                        children = diag.dataFlowPath.mapIndexed { i, entry ->
+                collapsibleState = if (canExpand) TreeItemCollapsibleState.Collapsed else TreeItemCollapsibleState.None,
+                children =
+                    if (canExpand)
+                        listOf(
                             TreeViewNode(
-                                id = "$diagId/dataFlowPath/$i",
-                                label = readRangeFromFile(entry.location, true) ?: entry.statement.prettyPrintRefined(),
-                                iconPath = "~/resources/icons/Bullet_16x.svg",
-                                command = KnownCommands.GoToStatement.asCommand(listOf(entry.location)))
-                        }),
-                    TreeViewNode(
-                        id = "$diagId/pathConditions",
-                        label = "Path Conditions",
-                        iconPath = "~/resources/icons/Lightbulb_16x.svg",
-                        collapsibleState = TreeItemCollapsibleState.Collapsed,
-                        children = when (diag.pathConditions) {
-                            is PathConditionsSuccess -> diag.pathConditions.items.mapIndexed { i, entry ->
-                                TreeViewNode(
-                                    id = "$diagId/pathConditions/$i",
-                                    label = entry.conditionAsString,
-                                    iconPath = "~/resources/icons/Bullet_16x.svg",
-                                    command = KnownCommands.GoToStatement.asCommand(entry.branchLocations),
-                                    data = entry.flowAnalysisVisualization,
-                                    contextValue = "pathCondition")
-                            }
-                            is PathConditionsError -> listOf(
-                                TreeViewNode(
-                                    id = "$diagId/pathConditions/error",
-                                    label = "Path Conditions Analysis failed, click for details",
-                                    iconPath = "~/resources/icons/ProcessError_16x.svg",
-                                    command = KnownCommands.ShowTextDocument.asCommand(ShowTextDocumentParams(ExceptionUtils.getStackTrace(diag.pathConditions.exception), "plaintext")))
-                            )
-                        })
-                )
+                                id = "$diagId/dataFlowPath",
+                                label = "Data Flow Path",
+                                iconPath = "~/resources/icons/ListMembers_16x.svg",
+                                command = KnownCommands.GoToStatement.asCommand(diag.dataFlowPath.map { it.location }),
+                                collapsibleState = TreeItemCollapsibleState.Collapsed,
+                                children = diag.dataFlowPath.mapIndexed { i, entry ->
+                                    TreeViewNode(
+                                        id = "$diagId/dataFlowPath/$i",
+                                        label = readRangeFromFile(entry.location, true)
+                                            ?: entry.statement.prettyPrintRefined(),
+                                        iconPath = "~/resources/icons/Bullet_16x.svg",
+                                        command = KnownCommands.GoToStatement.asCommand(listOf(entry.location)))
+                                }),
+                            TreeViewNode(
+                                id = "$diagId/pathConditions",
+                                label = "Path Conditions",
+                                iconPath = "~/resources/icons/Lightbulb_16x.svg",
+                                collapsibleState = TreeItemCollapsibleState.Collapsed,
+                                children = when (diag.pathConditions) {
+                                    is PathConditionsSuccess -> diag.pathConditions.items.mapIndexed { i, entry ->
+                                        TreeViewNode(
+                                            id = "$diagId/pathConditions/$i",
+                                            label = entry.conditionAsString,
+                                            iconPath = "~/resources/icons/Bullet_16x.svg",
+                                            command = KnownCommands.GoToStatement.asCommand(entry.branchLocations),
+                                            data = entry.flowAnalysisVisualization,
+                                            contextValue = "pathCondition")
+                                    }
+                                    is PathConditionsError -> listOf(
+                                        TreeViewNode(
+                                            id = "$diagId/pathConditions/error",
+                                            label = "Path Conditions Analysis failed, click for details",
+                                            iconPath = "~/resources/icons/ProcessError_16x.svg",
+                                            command = KnownCommands.ShowTextDocument.asCommand(ShowTextDocumentParams(ExceptionUtils.getStackTrace(diag.pathConditions.exception), "plaintext")))
+                                    )
+                                })
+                        )
+                    else
+                        emptyList()
             )
         }
 
