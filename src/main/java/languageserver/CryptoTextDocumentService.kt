@@ -3,7 +3,6 @@ package languageserver
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.future.future
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.TextDocumentService
 import java.util.concurrent.CompletableFuture
@@ -69,9 +68,12 @@ class CryptoTextDocumentService(private val server: CryptoLanguageServer) : Text
                     1 -> diags[0].summary
                     else -> "${diags.size} problems"
                 }
-                CodeLens(range, KnownCommands.FilterDiagnostics.asCommandWithTitle(message, diags.map { it.id }), null)
+                val commandArgs = DiagnosticCodeLens(params.textDocument.uri, lineNumber, diags.map { it.id })
+                CodeLens(range, KnownCommands.FilterDiagnostics.asCommandWithTitle(message, commandArgs), null)
             }
 
         (diagnosticLenses + methodLenses).toMutableList()
     }
 }
+
+data class DiagnosticCodeLens(val fileUri: String, val lineNumber: Int, val diagnosticIds: List<String>)

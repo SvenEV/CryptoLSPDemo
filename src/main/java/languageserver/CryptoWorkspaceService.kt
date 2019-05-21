@@ -72,11 +72,11 @@ class CryptoWorkspaceService(private val server: CryptoLanguageServer) : Workspa
 
             KnownCommands.FilterDiagnostics -> {
                 val diagnostics = server.project.getAsync().analysisResults.diagnostics
-                val ids = (params.arguments.firstOrNull() as? JsonArray)?.map { it.asString } ?: emptyList()
                 val tree =
-                    if (ids.any()) {
-                        val diagnosticsFiltered = diagnostics.filter { it.id in ids }
-                        DiagnosticsTree.buildFilteredTree(diagnosticsFiltered)
+                    if (params.arguments.any()) {
+                        val args = Gson().fromJson(params.arguments.firstOrNull() as JsonObject, DiagnosticCodeLens::class.java)
+                        val diagnosticsFiltered = diagnostics.filter { it.id in args.diagnosticIds }
+                        DiagnosticsTree.buildFilteredTree(diagnosticsFiltered, args.fileUri.asFilePath.fileName.toString(), args.lineNumber)
                     } else {
                         DiagnosticsTree.buildTree(diagnostics)
                     }

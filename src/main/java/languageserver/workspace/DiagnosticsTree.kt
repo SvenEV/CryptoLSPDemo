@@ -74,6 +74,7 @@ object DiagnosticsTree {
                 TreeViewNode(
                     resourceUri = uri,
                     label = if (uri == null) "<Project>" else null,
+                    iconPath = "~/resources/icons/JavaFile_16x.svg",
                     collapsibleState = TreeItemCollapsibleState.Expanded,
                     children = diags
                         .groupBy { it.className to it.methodName }
@@ -96,11 +97,15 @@ object DiagnosticsTree {
     /**
      * Constructs the tree for a subset of all diagnostics for the purpose of filtering on a specific method.
      */
-    fun buildFilteredTree(diagnostics: List<CogniCryptDiagnostic>): List<TreeViewNode> {
+    fun buildFilteredTree(diagnostics: List<CogniCryptDiagnostic>, fileName: String, lineNumber: Int): List<TreeViewNode> {
         val className = diagnostics.first().className
         val methodName = diagnostics.first().methodName
         val filterHeader = listOf(
-            TreeViewNode("Diagnostics in method:"),
+            TreeViewNode("Diagnostics at line ${lineNumber + 1} of:"),
+            TreeViewNode(
+                label = fileName,
+                iconPath = "~/resources/icons/JavaFile_16x.svg"
+            ),
             TreeViewNode(
                 label = "$className.$methodName",
                 iconPath = "~/resources/icons/Method_16x.svg"),
