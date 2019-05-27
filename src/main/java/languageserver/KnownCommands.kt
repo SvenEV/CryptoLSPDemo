@@ -16,7 +16,6 @@ enum class KnownCommands(val id: String, val title: String, val commandHandlerSi
     // Handled by language client:
     GoToStatement("cognicrypt.goto", "Go To Statement", CommandHandlerSite.Client);
 
-    val asCommand get() = Command(title, id)
     fun asCommand(vararg arguments: Any) = Command(title, id, arguments.toList())
     fun asCommandWithTitle(title: String, vararg arguments: Any) = Command(title, id, arguments.toList())
 

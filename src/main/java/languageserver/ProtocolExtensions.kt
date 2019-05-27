@@ -1,6 +1,7 @@
 package languageserver
 
 import org.eclipse.lsp4j.Command
+import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.Range
 
 // "cognicrypt/status"
@@ -58,4 +59,11 @@ data class ShowTextDocumentParams(
 
 data class ConnectToJavaExtensionResult(
     val jdtWorkspacePath: String
+)
+
+// "cognicrypt.goto" command
+
+data class LocationHighlight(
+    val location: Location,
+    val decorationId: String
 )

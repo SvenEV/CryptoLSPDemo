@@ -32,7 +32,7 @@ class CryptoTextDocumentService(private val server: CryptoLanguageServer) : Text
     override fun documentHighlight(position: TextDocumentPositionParams): CompletableFuture<MutableList<out DocumentHighlight>> = GlobalScope.future {
         val surroundingDiagnostic = server.project.getAsync().diagnosticsAt(position.textDocument.uri.asFilePath, position.position).firstOrNull()
 
-        val dataFlowPath = surroundingDiagnostic?.dataFlowPath?.mapNotNull {
+        val dataFlowPath = surroundingDiagnostic?.includedStatements?.mapNotNull {
             if (it.location.uri.asFilePath == position.textDocument.uri.asFilePath)
                 DocumentHighlight(it.location.range, DocumentHighlightKind.Read)
             else

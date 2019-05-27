@@ -19,7 +19,7 @@ object DiagnosticsTree {
                     else -> "StatusInformation_16x.svg"
                 }
             }
-            val canExpand = diag.dataFlowPath.any() || diag.pathConditions is PathConditionsError ||
+            val canExpand = diag.includedStatements.any() || diag.pathConditions is PathConditionsError ||
                 (diag.pathConditions is PathConditionsSuccess && diag.pathConditions.items.any())
 
             TreeViewNode(
@@ -34,9 +34,11 @@ object DiagnosticsTree {
                             id = "$diagId/dataFlowPath",
                             label = "Data Flow Path",
                             iconPath = "~/resources/icons/ListMembers_16x.svg",
-                            command = KnownCommands.GoToStatement.asCommand(diag.dataFlowPath.map { it.location }),
+                            command = KnownCommands.GoToStatement.asCommand(
+                                diag.includedStatements.map { LocationHighlight(it.location, "yellow") } +
+                                diag.excludedStatements.map { LocationHighlight(it.location, "red") }),
                             collapsibleState = TreeItemCollapsibleState.Collapsed,
-                            children = diag.dataFlowPath
+                            children = diag.includedStatements
                                 .sortedWith(compareBy({ it.location.uri }, { it.location.range.start.line }))
                                 .mapIndexed { i, entry ->
                                     TreeViewNode(
@@ -44,7 +46,7 @@ object DiagnosticsTree {
                                         label = readRangeFromFile(entry.location, true)
                                             ?: entry.statement.prettyPrintRefined(),
                                         iconPath = "~/resources/icons/Bullet_16x.svg",
-                                        command = KnownCommands.GoToStatement.asCommand(listOf(entry.location)))
+                                        command = KnownCommands.GoToStatement.asCommand(listOf(LocationHighlight(entry.location, "yellow"))))
                                 }),
                         TreeViewNode(
                             id = "$diagId/pathConditions",
@@ -57,7 +59,8 @@ object DiagnosticsTree {
                                         id = "$diagId/pathConditions/$i",
                                         label = entry.conditionAsString,
                                         iconPath = "~/resources/icons/Bullet_16x.svg",
-                                        command = KnownCommands.GoToStatement.asCommand(entry.branchLocations),
+                                        command = KnownCommands.GoToStatement.asCommand(
+                                            entry.branchLocations.map { LocationHighlight(it, "yellow") }),
                                         data = entry.flowAnalysisVisualization,
                                         contextValue = "pathCondition")
                                 }

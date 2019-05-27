@@ -1,6 +1,7 @@
 package languageserver
 
 import boomerang.jimple.Statement
+import crypto.analysis.errors.ConstraintError
 import crypto.analysis.errors.ErrorWithObjectAllocation
 import crypto.pathconditions.expressions.ContextFormat
 import crypto.pathconditions.expressions.JFalse
@@ -30,7 +31,8 @@ data class CogniCryptDiagnostic(
     val severity: DiagnosticSeverity,
     val location: Location?,
     val pathConditions: PathConditionsInfo,
-    val dataFlowPath: List<DataFlowPathItem>)
+    val includedStatements: List<DataFlowPathItem>,
+    val excludedStatements: List<DataFlowPathItem>)
 
 class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
     lateinit var diagnostics: Collection<CogniCryptDiagnostic>
@@ -78,8 +80,19 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                                 PathConditionsError(ex) to DiagnosticSeverity.Error
                             }
 
-                        val dataFlowPath = when (error) {
+                        val includedStatements = when (error) {
                             is ErrorWithObjectAllocation -> error.dataFlowPath
+                                .mapNotNull {
+                                    it.stmt().unit.get().sourceLocation?.let { location ->
+                                        DataFlowPathItem(location, it.stmt())
+                                    }
+                                }
+                                .toList()
+                            else -> emptyList()
+                        }
+
+                        val excludedStatements = when (error) {
+                            is ConstraintError -> (error.allDataFlowPaths.values() - error.dataFlowPath)
                                 .mapNotNull {
                                     it.stmt().unit.get().sourceLocation?.let { location ->
                                         DataFlowPathItem(location, it.stmt())
@@ -101,7 +114,8 @@ class CryptoErrorReporter : PathConditionsErrorMarkerListener() {
                             severity,
                             stmt.sourceLocation,
                             pathConditions,
-                            dataFlowPath)
+                            includedStatements,
+                            excludedStatements)
                     }
                 }
             }
