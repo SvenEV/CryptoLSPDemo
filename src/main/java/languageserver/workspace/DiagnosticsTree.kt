@@ -1,5 +1,6 @@
 package languageserver.workspace
 
+import crypto.pathconditions.BlockUsage
 import crypto.pathconditions.debug.prettyPrintRefined
 import languageserver.*
 import org.apache.commons.lang3.exception.ExceptionUtils
@@ -36,18 +37,24 @@ object DiagnosticsTree {
                             iconPath = "~/resources/icons/ListMembers_16x.svg",
                             command = KnownCommands.GoToStatement.asCommand(
                                 diag.includedStatements.map { LocationHighlight(it.location, "yellow") } +
-                                diag.excludedStatements.map { LocationHighlight(it.location, "red") }),
+                                    diag.excludedStatements.map { LocationHighlight(it.location, "red") }),
                             collapsibleState = TreeItemCollapsibleState.Collapsed,
-                            children = (diag.includedStatements.map { it to "~/resources/icons/BulletYellow_16x.svg" })
-                                .plus((diag.excludedStatements.map { it to "~/resources/icons/BulletRed_16x.svg" }))
+                            children = (diag.includedStatements.map { it to BlockUsage.Owned })
+                                .plus((diag.excludedStatements.map { it to BlockUsage.Foreign }))
                                 .sortedWith(compareBy({ it.first.location.uri }, { it.first.location.range.start.line }))
                                 .mapIndexed { i, (entry, iconPath) ->
                                     TreeViewNode(
                                         id = "$diagId/dataFlowPath/$i",
                                         label = readRangeFromFile(entry.location, true)
                                             ?: entry.statement.prettyPrintRefined(),
-                                        iconPath = iconPath,
-                                        command = KnownCommands.GoToStatement.asCommand(listOf(LocationHighlight(entry.location, "yellow"))))
+                                        iconPath = when (iconPath) {
+                                            BlockUsage.Foreign -> "~/resources/icons/BulletRed_16x.svg"
+                                            else -> "~/resources/icons/BulletYellow_16x.svg"
+                                        },
+                                        command = KnownCommands.GoToStatement.asCommand(listOf(LocationHighlight(entry.location, when (iconPath) {
+                                            BlockUsage.Foreign -> "red"
+                                            else -> "yellow"
+                                        }))))
                                 }),
                         TreeViewNode(
                             id = "$diagId/pathConditions",
