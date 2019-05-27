@@ -38,14 +38,15 @@ object DiagnosticsTree {
                                 diag.includedStatements.map { LocationHighlight(it.location, "yellow") } +
                                 diag.excludedStatements.map { LocationHighlight(it.location, "red") }),
                             collapsibleState = TreeItemCollapsibleState.Collapsed,
-                            children = diag.includedStatements
-                                .sortedWith(compareBy({ it.location.uri }, { it.location.range.start.line }))
-                                .mapIndexed { i, entry ->
+                            children = (diag.includedStatements.map { it to "~/resources/icons/BulletYellow_16x.svg" })
+                                .plus((diag.excludedStatements.map { it to "~/resources/icons/BulletRed_16x.svg" }))
+                                .sortedWith(compareBy({ it.first.location.uri }, { it.first.location.range.start.line }))
+                                .mapIndexed { i, (entry, iconPath) ->
                                     TreeViewNode(
                                         id = "$diagId/dataFlowPath/$i",
                                         label = readRangeFromFile(entry.location, true)
                                             ?: entry.statement.prettyPrintRefined(),
-                                        iconPath = "~/resources/icons/Bullet_16x.svg",
+                                        iconPath = iconPath,
                                         command = KnownCommands.GoToStatement.asCommand(listOf(LocationHighlight(entry.location, "yellow"))))
                                 }),
                         TreeViewNode(
