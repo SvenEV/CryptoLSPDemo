@@ -16,12 +16,14 @@ fun analyze(client: CryptoLanguageClient?, rulesDir: String, project: WorkspaceP
     try {
         client?.setStatusBarMessage(StatusMessage("Preparing analysis..."))
 
+        val libPaths = project.projectPaths.libraryPath.map { it.toString() }
+
         val transformer = when (codeSource) {
             CodeSource.Compiled -> {
-                CryptoTransformer(project.rootPath.toString(), rulesDir)
+                CryptoTransformer(project.rootPath.toString(), libPaths, rulesDir)
             }
             CodeSource.Source -> {
-                val trafo = CryptoTransformer(null, rulesDir)
+                val trafo = CryptoTransformer(null, libPaths, rulesDir)
                 client?.setStatusBarMessage(StatusMessage("Processing sources..."))
                 loadSourceCode(project.projectPaths)
                 trafo

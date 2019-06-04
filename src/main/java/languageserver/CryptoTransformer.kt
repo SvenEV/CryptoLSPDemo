@@ -8,9 +8,7 @@ import crypto.analysis.CrySLResultsReporter
 import crypto.analysis.CryptoScanner
 import crypto.rules.CryptSLRule
 import crypto.rules.CryptSLRuleReader
-import soot.G
-import soot.Scene
-import soot.SceneTransformer
+import soot.*
 import soot.jimple.toolkits.ide.icfg.AbstractJimpleBasedICFG
 import soot.jimple.toolkits.ide.icfg.JimpleBasedInterproceduralCFG
 import soot.options.Options
@@ -18,6 +16,7 @@ import java.io.File
 
 class CryptoTransformer(
     private val applicationClassPath: String?,
+    private val libraryPaths: List<String>,
     ruleDir: String) : SceneTransformer() {
 
     private val errorReporter: CryptoErrorReporter
@@ -35,7 +34,6 @@ class CryptoTransformer(
     var icfg: AbstractJimpleBasedICFG? = null
 
     init {
-        initilizeSootOptions()
         this.errorReporter = CryptoErrorReporter()
 
         rules = File(ruleDir).listFiles()
@@ -49,6 +47,7 @@ class CryptoTransformer(
 
         excludeList = rules.map { Utils.getFullyQualifiedName(it) }.toList()
         includeList = emptyList()
+        initilizeSootOptions()
     }
 
     override fun internalTransform(phaseName: String, options: Map<String, String>) {
@@ -93,7 +92,7 @@ class CryptoTransformer(
         Options.v().set_allow_phantom_refs(true)
         Options.v().set_keep_line_number(true)
         Options.v().set_prepend_classpath(true)// append rt.jar to soot class path
-        Options.v().set_soot_classpath(File.pathSeparator + pathToJCE)
+        Options.v().set_soot_classpath(File.pathSeparator + (libraryPaths + pathToJCE).joinToString(File.pathSeparator))
         if (applicationClassPath != null)
             Options.v().set_process_dir(applicationClassPath.split(File.pathSeparatorChar))
         Options.v().set_include(includeList)
