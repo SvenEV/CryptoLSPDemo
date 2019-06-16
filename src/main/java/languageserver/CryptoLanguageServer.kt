@@ -21,6 +21,7 @@ import java.util.concurrent.CompletableFuture
 import kotlinx.coroutines.*
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.future.future
+import java.nio.file.Files
 import java.nio.file.Paths
 
 class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, LanguageClientAware {
@@ -178,13 +179,22 @@ class CryptoLanguageServer(private val rulesDir: String) : LanguageServer, Langu
 
             client.setStatusBarMessage(StatusMessage("Initializing project..."))
 
+            val rootUri = initParams.getAsync().rootUri.asFilePath
             val proj = when (configuration.codeSource) {
                 CodeSource.Source -> {
-                    WorkspaceProject.create(initParams.getAsync().rootUri.asFilePath)
+                    WorkspaceProject.create(rootUri)
                 }
                 CodeSource.Compiled -> {
-                    val result = client.connectToJavaExtension().await()
-                    WorkspaceProject.create(Paths.get(result.jdtWorkspacePath))
+                    // HACK: Check for a target/classes folder - if present, assume class files to be there
+                    // Otherwise, ask VSCode extension to locate class files
+                    val targetDir = rootUri.resolve("target/classes")
+                    if (Files.isDirectory(targetDir)) {
+                        WorkspaceProject.create(targetDir)
+                    }
+                    else {
+                        val result = client.connectToJavaExtension().await()
+                        WorkspaceProject.create(Paths.get(result.jdtWorkspacePath))
+                    }
                 }
             }
 
